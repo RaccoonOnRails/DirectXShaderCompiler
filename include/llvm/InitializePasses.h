@@ -328,6 +328,7 @@ void initializeDwarfEHPreparePass(PassRegistry&);
 void initializeFloat2IntPass(PassRegistry&);
 void initializeLoopDistributePass(PassRegistry&);
 void initializeSjLjEHPreparePass(PassRegistry&);
+void initializeDxilToRpsPass(PassRegistry&);
 }
 
 #endif

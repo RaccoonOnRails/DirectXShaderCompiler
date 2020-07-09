@@ -75,6 +75,7 @@ ModulePass *createPausePassesPass();
 ModulePass *createResumePassesPass();
 FunctionPass *createMatrixBitcastLowerPass();
 ModulePass *createDxilCleanupAddrSpaceCastPass();
+ModulePass *createDxilToRpsPass();
 
 void initializeDxilCondenseResourcesPass(llvm::PassRegistry&);
 void initializeDxilLowerCreateHandleForLibPass(llvm::PassRegistry&);

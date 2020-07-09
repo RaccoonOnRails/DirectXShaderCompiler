@@ -184,6 +184,7 @@ HRESULT SetupRegistryPassForHLSL() {
     initializeTargetTransformInfoWrapperPassPass(Registry);
     initializeTypeBasedAliasAnalysisPass(Registry);
     initializeVerifierLegacyPassPass(Registry);
+    initializeDxilToRpsPass(Registry);
     // INIT-PASSES:END
     // Not schematized - exclusively for compiler authors.
     initializeCFGPrinterPasses(Registry);
