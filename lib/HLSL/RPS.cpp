@@ -37,6 +37,7 @@ struct DxilToRps : public ModulePass {
   Function *m_RpsNodeParamPushFunc = nullptr;
   std::vector<StringRef> m_RpsNodeNames = {};
   StringMap<int32_t> m_RpsNodeNameIndice = {};
+  StringMap<Function *> m_RpsLibFuncs = {};
 
   bool runOnModule(Module &M) override {
     auto voidType = Type::getVoidTy(M.getContext());
@@ -45,11 +46,17 @@ struct DxilToRps : public ModulePass {
     m_RpsNodeCallFunc = dyn_cast<Function>(nodeCallFunc);
     m_RpsNodeCallFunc->setLinkage(GlobalValue::ExternalLinkage);
 
-    auto argType = Type::getInt8PtrTy(M.getContext());
+    auto int8PtrType = Type::getInt8PtrTy(M.getContext());
     auto paramPushFunc =
-        M.getOrInsertFunction("__rps_param_push", voidType, argType, nullptr);
+        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType, nullptr);
     m_RpsNodeParamPushFunc = dyn_cast<Function>(paramPushFunc);
     m_RpsNodeParamPushFunc->setLinkage(GlobalValue::ExternalLinkage);
+
+    m_RpsLibFuncs.insert(std::make_pair("describe_resource", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("describe_view", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("create_resource", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("create_view", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("clear_view", nullptr));
 
     for (auto &F : M) {
       printf("\nFunction %s", F.getName().data());
@@ -61,6 +68,27 @@ struct DxilToRps : public ModulePass {
     WriteExportEntries(M);
 
     return true;
+  }
+
+  void ReplaceLibFunction(CallInst *C) {
+    auto calleeF = C->getCalledFunction();
+    auto demangledName = DemangleNames(calleeF->getName());
+    auto libFuncIter = m_RpsLibFuncs.find(demangledName);
+
+    if (libFuncIter != m_RpsLibFuncs.end()) {
+
+      if (libFuncIter->second == nullptr) {
+        auto newFuncName = "__rps_" + demangledName;
+        calleeF->setName(newFuncName);
+        libFuncIter->second = calleeF;
+      }
+
+      auto idnew = C->getCallingConv();
+      printf("\n%d", idnew);
+
+      printf("\n        Replaced: %s => %s", demangledName.str().c_str(),
+             C->getCalledFunction()->getName().str().c_str());
+    }
   }
 
   bool runOnFunction(Function &F) {
@@ -135,6 +163,9 @@ struct DxilToRps : public ModulePass {
 
           callInsts.push_back(callInst);
         }
+        else {
+          ReplaceLibFunction(callInst);
+        }
       }
     }
 
@@ -192,7 +223,8 @@ struct DxilToRps : public ModulePass {
     auto stringType = llvm::Type::getInt8PtrTy(M.getContext());
 
     for (uint32_t i = 0; i < m_RpsNodeNames.size(); i++) {
-      auto stringValue = CreateGlobalStringPtr(M, m_RpsNodeNames[i]);
+      auto demangledName = DemangleNames(m_RpsNodeNames[i]);
+      auto stringValue = CreateGlobalStringPtr(M, demangledName);
       stringConstants[i] = stringValue;
     }
     stringConstants.back() = ConstantPointerNull::get(stringType);

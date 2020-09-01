@@ -39,5 +39,7 @@ add_subdirectory(dxv)
 add_subdirectory(dxlib-sample)
 # UI powered by .NET.
 add_subdirectory(dotnetc)
+# RPS
+add_subdirectory(rps-hlslc)
 endif (WIN32)
 # HLSL Change Ends

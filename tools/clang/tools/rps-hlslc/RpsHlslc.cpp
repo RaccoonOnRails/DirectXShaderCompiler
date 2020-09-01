@@ -1,0 +1,517 @@
+#include <Windows.h>
+#include <algorithm>
+#include <dxcapi.h>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <wrl/client.h>
+
+// Loader
+HMODULE g_DxcDll = {};
+DxcCreateInstanceProc g_pfnDxcCreateInstance = {};
+
+bool LoadDxc() {
+  if (g_DxcDll == nullptr) {
+    g_DxcDll = LoadLibrary(TEXT("dxcompiler.dll"));
+
+    if (g_DxcDll) {
+      g_pfnDxcCreateInstance =
+          (DxcCreateInstanceProc)GetProcAddress(g_DxcDll, "DxcCreateInstance");
+    }
+  }
+
+  return (g_pfnDxcCreateInstance != nullptr);
+}
+
+using Microsoft::WRL::ComPtr;
+using namespace std::string_literals;
+
+void ThrowIfFailed(HRESULT hr) {
+  if (FAILED(hr)) {
+    throw;
+  }
+}
+
+static const char c_RpsHeader[] = R"(
+struct nodeidentifier { uint unused; };
+#define node [noinline] nodeidentifier
+
+#define __RPS_DECL_HANDLE(X) struct X { uint _value; };
+__RPS_DECL_HANDLE(resource);
+__RPS_DECL_HANDLE(view);
+__RPS_DECL_HANDLE(rtv);
+__RPS_DECL_HANDLE(srv);
+__RPS_DECL_HANDLE(uav);
+
+#define __RPS_BEGIN_DECL_ENUM(X) struct X { uint _value; }; namespace rps { namespace X { typedef struct X __RPS_ENUM_TYPE;
+#define __RPS_ENUM_VALUE(N, V) static const __RPS_ENUM_TYPE N = { V };
+#define __RPS_END_DECL_ENUM() } }
+
+__RPS_BEGIN_DECL_ENUM(resourcetype)
+    __RPS_ENUM_VALUE(buffer, 0)
+    __RPS_ENUM_VALUE(tex1d, 1)
+    __RPS_ENUM_VALUE(tex2d, 2)
+    __RPS_ENUM_VALUE(tex3d, 3)
+__RPS_END_DECL_ENUM()
+
+__RPS_BEGIN_DECL_ENUM(format)
+    __RPS_ENUM_VALUE(unknown                  , 0)
+    __RPS_ENUM_VALUE(r32g32b32a32_typeless    , 1)
+    __RPS_ENUM_VALUE(r32g32b32a32_float       , 2)
+    __RPS_ENUM_VALUE(r32g32b32a32_uint        , 3)
+    __RPS_ENUM_VALUE(r32g32b32a32_sint        , 4)
+    __RPS_ENUM_VALUE(r32g32b32_typeless       , 5)
+    __RPS_ENUM_VALUE(r32g32b32_float          , 6)
+    __RPS_ENUM_VALUE(r32g32b32_uint           , 7)
+    __RPS_ENUM_VALUE(r32g32b32_sint           , 8)
+    __RPS_ENUM_VALUE(r16g16b16a16_typeless    , 9)
+    __RPS_ENUM_VALUE(r16g16b16a16_float       , 10)
+    __RPS_ENUM_VALUE(r16g16b16a16_unorm       , 11)
+    __RPS_ENUM_VALUE(r16g16b16a16_uint        , 12)
+    __RPS_ENUM_VALUE(r16g16b16a16_snorm       , 13)
+    __RPS_ENUM_VALUE(r16g16b16a16_sint        , 14)
+    __RPS_ENUM_VALUE(r32g32_typeless          , 15)
+    __RPS_ENUM_VALUE(r32g32_float             , 16)
+    __RPS_ENUM_VALUE(r32g32_uint              , 17)
+    __RPS_ENUM_VALUE(r32g32_sint              , 18)
+    __RPS_ENUM_VALUE(r32g8x24_typeless        , 19)
+    __RPS_ENUM_VALUE(d32_float_s8x24_uint     , 20)
+    __RPS_ENUM_VALUE(r32_float_x8x24_typeless , 21)
+    __RPS_ENUM_VALUE(x32_typeless_g8x24_uint  , 22)
+    __RPS_ENUM_VALUE(r10g10b10a2_typeless     , 23)
+    __RPS_ENUM_VALUE(r10g10b10a2_unorm        , 24)
+    __RPS_ENUM_VALUE(r10g10b10a2_uint         , 25)
+    __RPS_ENUM_VALUE(r11g11b10_float          , 26)
+    __RPS_ENUM_VALUE(r8g8b8a8_typeless        , 27)
+    __RPS_ENUM_VALUE(r8g8b8a8_unorm           , 28)
+    __RPS_ENUM_VALUE(r8g8b8a8_unorm_srgb      , 29)
+    __RPS_ENUM_VALUE(r8g8b8a8_uint            , 30)
+    __RPS_ENUM_VALUE(r8g8b8a8_snorm           , 31)
+    __RPS_ENUM_VALUE(r8g8b8a8_sint            , 32)
+    __RPS_ENUM_VALUE(r16g16_typeless          , 33)
+    __RPS_ENUM_VALUE(r16g16_float             , 34)
+    __RPS_ENUM_VALUE(r16g16_unorm             , 35)
+    __RPS_ENUM_VALUE(r16g16_uint              , 36)
+    __RPS_ENUM_VALUE(r16g16_snorm             , 37)
+    __RPS_ENUM_VALUE(r16g16_sint              , 38)
+    __RPS_ENUM_VALUE(r32_typeless             , 39)
+    __RPS_ENUM_VALUE(d32_float                , 40)
+    __RPS_ENUM_VALUE(r32_float                , 41)
+    __RPS_ENUM_VALUE(r32_uint                 , 42)
+    __RPS_ENUM_VALUE(r32_sint                 , 43)
+    __RPS_ENUM_VALUE(r24g8_typeless           , 44)
+    __RPS_ENUM_VALUE(d24_unorm_s8_uint        , 45)
+    __RPS_ENUM_VALUE(r24_unorm_x8_typeless    , 46)
+    __RPS_ENUM_VALUE(x24_typeless_g8_uint     , 47)
+    __RPS_ENUM_VALUE(r8g8_typeless            , 48)
+    __RPS_ENUM_VALUE(r8g8_unorm               , 49)
+    __RPS_ENUM_VALUE(r8g8_uint                , 50)
+    __RPS_ENUM_VALUE(r8g8_snorm               , 51)
+    __RPS_ENUM_VALUE(r8g8_sint                , 52)
+    __RPS_ENUM_VALUE(r16_typeless             , 53)
+    __RPS_ENUM_VALUE(r16_float                , 54)
+    __RPS_ENUM_VALUE(d16_unorm                , 55)
+    __RPS_ENUM_VALUE(r16_unorm                , 56)
+    __RPS_ENUM_VALUE(r16_uint                 , 57)
+    __RPS_ENUM_VALUE(r16_snorm                , 58)
+    __RPS_ENUM_VALUE(r16_sint                 , 59)
+    __RPS_ENUM_VALUE(r8_typeless              , 60)
+    __RPS_ENUM_VALUE(r8_unorm                 , 61)
+    __RPS_ENUM_VALUE(r8_uint                  , 62)
+    __RPS_ENUM_VALUE(r8_snorm                 , 63)
+    __RPS_ENUM_VALUE(r8_sint                  , 64)
+    __RPS_ENUM_VALUE(a8_unorm                 , 65)
+    __RPS_ENUM_VALUE(r1_unorm                 , 66)
+    __RPS_ENUM_VALUE(r9g9b9e5_sharedexp       , 67)
+    __RPS_ENUM_VALUE(r8g8_b8g8_unorm          , 68)
+    __RPS_ENUM_VALUE(g8r8_g8b8_unorm          , 69)
+    __RPS_ENUM_VALUE(bc1_typeless             , 70)
+    __RPS_ENUM_VALUE(bc1_unorm                , 71)
+    __RPS_ENUM_VALUE(bc1_unorm_srgb           , 72)
+    __RPS_ENUM_VALUE(bc2_typeless             , 73)
+    __RPS_ENUM_VALUE(bc2_unorm                , 74)
+    __RPS_ENUM_VALUE(bc2_unorm_srgb           , 75)
+    __RPS_ENUM_VALUE(bc3_typeless             , 76)
+    __RPS_ENUM_VALUE(bc3_unorm                , 77)
+    __RPS_ENUM_VALUE(bc3_unorm_srgb           , 78)
+    __RPS_ENUM_VALUE(bc4_typeless             , 79)
+    __RPS_ENUM_VALUE(bc4_unorm                , 80)
+    __RPS_ENUM_VALUE(bc4_snorm                , 81)
+    __RPS_ENUM_VALUE(bc5_typeless             , 82)
+    __RPS_ENUM_VALUE(bc5_unorm                , 83)
+    __RPS_ENUM_VALUE(bc5_snorm                , 84)
+    __RPS_ENUM_VALUE(b5g6r5_unorm             , 85)
+    __RPS_ENUM_VALUE(b5g5r5a1_unorm           , 86)
+    __RPS_ENUM_VALUE(b8g8r8a8_unorm           , 87)
+    __RPS_ENUM_VALUE(b8g8r8x8_unorm           , 88)
+    __RPS_ENUM_VALUE(b8g8r8a8_typeless        , 90)
+    __RPS_ENUM_VALUE(b8g8r8a8_unorm_srgb      , 91)
+    __RPS_ENUM_VALUE(b8g8r8x8_typeless        , 92)
+    __RPS_ENUM_VALUE(b8g8r8x8_unorm_srgb      , 93)
+
+__RPS_END_DECL_ENUM()
+
+namespace rps
+{
+    static const uint uav_buffer = 0;
+    static const uint uav_tex1d = 1;
+    static const uint uav_tex1darray = 2;
+    static const uint uav_tex2d = 3;
+    static const uint uav_tex2darray = 4;
+    static const uint uav_tex3d = 5;
+
+    static const uint srv_buffer = 0x10;
+    static const uint srv_tex1d = 0x11;
+    static const uint srv_tex1darray = 0x12;
+    static const uint srv_tex2d = 0x13;
+    static const uint srv_tex2darray = 0x14;
+    static const uint srv_tex2dms = 0x15;
+    static const uint srv_tex2dmsarray = 0x16;
+    static const uint srv_tex3d = 0x17;
+    static const uint srv_texcube = 0x18;
+    static const uint srv_texcubearray = 0x19;
+    static const uint srv_rtas = 0x1a;
+
+    static const uint rtv_buffer = 0x40;
+    static const uint rtv_tex1d = 0x41;
+    static const uint rtv_tex1darray = 0x42;
+    static const uint rtv_tex2d = 0x43;
+    static const uint rtv_tex2darray = 0x44;
+    static const uint rtv_tex2dms = 0x45;
+    static const uint rtv_tex2dmsarray = 0x46;
+    static const uint rtv_tex3d = 0x47;
+
+    static const uint dsv_tex1d = 0x50;
+    static const uint dsv_tex1darray = 0x51;
+    static const uint dsv_tex2d = 0x52;
+    static const uint dsv_tex2darray = 0x53;
+    static const uint dsv_tex2dms = 0x54;
+    static const uint dsv_tex2dmsarray = 0x55;
+
+    static const uint dsv_readonly_depth = 0x8000;
+    static const uint dsv_readonly_stencil = 0x4000;
+
+    static const uint cbv = 0x70;
+
+    namespace clear
+    {
+        static const uint color = 0;
+        static const uint depth = 1;
+        static const uint stencil = 2;
+        static const uint uavfloat = 4;
+        static const uint uavuint = 8;
+    }
+}
+
+struct SampleDesc
+{
+  uint Count;
+  uint Quality;
+};
+
+struct ResourceDesc
+{
+  resourcetype Dimension;
+  format Format;
+  uint64_t Width;
+  uint Height;
+  uint DepthOrArraySize;
+  uint MipLevels;
+  SampleDesc SampleDesc;
+};
+
+struct ResourceViewDesc
+{
+  resource Parent;
+  uint Dimension;
+  format Format;
+  uint BaseMip;
+  uint Mips;
+  uint BaseArraySlice;
+  uint ArrayLayers;
+  uint PlaneMask;
+};
+
+ResourceDesc describe_resource( resource r );
+ResourceViewDesc describe_view( view v );
+resource create_resource( ResourceDesc desc );
+view create_view( ResourceViewDesc desc );
+void clear_view( view v, uint option, uint4 data );
+
+inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, format format, uint sampleCount = 1, uint sampleQuality = 0 )
+{
+    ResourceDesc desc;
+    desc.Dimension = rps::resourcetype::tex2d;
+    desc.Format = format;
+    desc.Width = width;
+    desc.Height = height;
+    desc.DepthOrArraySize = arraySlices;
+    desc.MipLevels = numMips;
+    desc.SampleDesc.Count = sampleCount;
+    desc.SampleDesc.Quality = sampleQuality;
+
+    return create_resource(desc);
+}
+
+inline resource create_buffer( uint64_t width, format format = rps::format::unknown )
+{
+    ResourceDesc desc;
+    desc.Dimension = rps::resourcetype::buffer;
+    desc.Format = format;
+    desc.Width = width;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.SampleDesc.Quality = 0;
+
+    return create_resource(desc);
+}
+
+inline view create_srv( resource r, uint dimension, uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, format format = rps::format::unknown )
+{
+    ResourceViewDesc desc;
+    desc.Parent = r;
+    desc.Dimension = dimension;
+    desc.Format = format;
+    desc.BaseMip = baseMip;
+    desc.Mips = mipLevels;
+    desc.BaseArraySlice = baseArraySlice;
+    desc.ArrayLayers = numArraySlices;
+    desc.PlaneMask = planeMask;
+
+    return create_view( desc );
+}
+
+inline view create_uav( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown )
+{
+    ResourceViewDesc desc;
+    desc.Parent = r;
+    desc.Dimension = dimension;
+    desc.Format = format;
+    desc.BaseMip = baseMip;
+    desc.Mips = 1;
+    desc.BaseArraySlice = baseArraySlice;
+    desc.ArrayLayers = numArraySlices;
+    desc.PlaneMask = 0x1;
+
+    return create_view( desc );
+}
+
+inline view create_rtv( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown )
+{
+    ResourceViewDesc desc;
+    desc.Parent = r;
+    desc.Dimension = dimension;
+    desc.Format = format;
+    desc.BaseMip = baseMip;
+    desc.Mips = 1;
+    desc.BaseArraySlice = baseArraySlice;
+    desc.ArrayLayers = numArraySlices;
+    desc.PlaneMask = 0x1;
+
+    return create_view( desc );
+}
+
+inline void clear( rtv d, float4 val )
+{
+    return clear_view( d, rps::clear::color, asuint(val) );
+}
+)";
+
+ComPtr<IDxcBlob> ReflectContainer(const ComPtr<IDxcBlob> &pContainer) {
+  ComPtr<IDxcContainerReflection> pRefl;
+  g_pfnDxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(&pRefl));
+
+  ThrowIfFailed(pRefl->Load(pContainer.Get()));
+
+  ComPtr<IDxcBlob> dxilContent;
+  UINT32 dxilIdx;
+  if (SUCCEEDED(pRefl->FindFirstPartKind('LIXD', &dxilIdx))) {
+    printf("\nFound DXIL");
+
+    pRefl->GetPartContent(dxilIdx, &dxilContent);
+
+    FILE *fp = {};
+    fopen_s(&fp, "tmp.bc", "wb");
+    if (fp) {
+      fwrite(dxilContent->GetBufferPointer(), 1, dxilContent->GetBufferSize(),
+             fp);
+    }
+    fclose(fp);
+  }
+
+  return dxilContent;
+}
+
+ComPtr<IDxcBlob> CompileHlslToDxil(const char *fileName) {
+  ComPtr<IDxcLibrary> pLibrary;
+  ThrowIfFailed(
+      g_pfnDxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&pLibrary)));
+
+  FILE *fp = {};
+  fopen_s(&fp, fileName, "rb");
+  if (!fp) {
+    printf("Failed to open file '%s'", fileName);
+    return nullptr;
+  }
+
+  fseek(fp, 0, SEEK_END);
+  auto fileLen = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+
+  std::vector<char> text;
+  text.resize(_countof(c_RpsHeader) + fileLen);
+
+  memcpy(&text[0], c_RpsHeader, _countof(c_RpsHeader) - 1);
+  fread(&text[_countof(c_RpsHeader) - 1], 1, fileLen, fp);
+  fclose(fp);
+
+  ComPtr<IDxcBlobEncoding> pSource, pError;
+  ThrowIfFailed(pLibrary->CreateBlobWithEncodingFromPinned(
+      text.data(), static_cast<UINT32>(text.size()), CP_UTF8, &pSource));
+
+  ComPtr<IDxcCompiler> pCompiler;
+  ThrowIfFailed(
+      g_pfnDxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&pCompiler)));
+
+  std::vector<LPCWSTR> arguments;
+
+  arguments.push_back(L"-Vd");
+  arguments.push_back(L"-default-linkage");
+  arguments.push_back(L"external");
+
+  size_t nConv;
+  wchar_t fileNameW[MAX_PATH];
+  mbstowcs_s(&nConv, fileNameW, fileName, _countof(fileNameW));
+
+  ComPtr<IDxcOperationResult> pResult;
+  HRESULT hr = pCompiler->Compile(
+      pSource.Get(), fileNameW, L"", L"lib_6_3", arguments.data(),
+      static_cast<UINT>(arguments.size()), nullptr, 0, nullptr, &pResult);
+
+  if (pResult) {
+    pResult->GetErrorBuffer(&pError);
+  }
+
+  if (pError) {
+    ComPtr<IDxcBlobEncoding> pErrorUtf16;
+    pLibrary->GetBlobAsUtf16(pError.Get(), &pErrorUtf16);
+    std::wstring errText(
+        reinterpret_cast<WCHAR *>(pErrorUtf16->GetBufferPointer()),
+        reinterpret_cast<WCHAR *>(pErrorUtf16->GetBufferPointer()) +
+            pErrorUtf16->GetBufferSize() / 2);
+    wprintf(L"\n");
+    wprintf(errText.c_str());
+  }
+
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+
+  ComPtr<IDxcBlob> pContainer;
+  pResult->GetResult(&pContainer);
+
+  if (pContainer) {
+    ComPtr<IDxcBlobEncoding> pDisasm;
+    ThrowIfFailed(pCompiler->Disassemble(pContainer.Get(), &pDisasm));
+
+    fp = {};
+    fopen_s(&fp, "tmp.ll", "wb");
+    if (fp) {
+      fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
+    }
+    fclose(fp);
+  }
+
+  return ReflectContainer(pContainer);
+}
+
+ComPtr<IDxcBlob> CompileDxilToAsm(const ComPtr<IDxcBlob> &pShader) {
+  ComPtr<IDxcOptimizer> pOptimizer;
+  ThrowIfFailed(
+      g_pfnDxcCreateInstance(CLSID_DxcOptimizer, IID_PPV_ARGS(&pOptimizer)));
+
+  UINT32 passCnt = 0;
+  ThrowIfFailed(pOptimizer->GetAvailablePassCount(&passCnt));
+
+  bool bFoundRpsPass = false;
+  for (UINT32 i = 0; i < passCnt; i++) {
+    ComPtr<IDxcOptimizerPass> pPass;
+    ThrowIfFailed(pOptimizer->GetAvailablePass(i, &pPass));
+
+    LPWSTR name;
+    pPass->GetOptionName(&name);
+
+    printf("\n%S", name);
+
+    if (0 == wcscmp(name, L"dxil-2-rps")) {
+      bFoundRpsPass = true;
+      break;
+    }
+  }
+
+  printf("%s dxil-2-rps pass.", bFoundRpsPass ? "Found" : "Didn't find");
+
+  ComPtr<IDxcBlob> pOutModule;
+
+  if (bFoundRpsPass) {
+    LPCWSTR options[] = {
+        L"-dxil-2-rps",
+    };
+
+    ComPtr<IDxcBlobEncoding> pOutText;
+
+    ThrowIfFailed(pOptimizer->RunOptimizer(
+        pShader.Get(), options, _countof(options), &pOutModule, &pOutText));
+
+    if (pOutText) {
+      printf("\n%s", (char *)pOutText->GetBufferPointer());
+    }
+
+    FILE *fp = {};
+    fopen_s(&fp, "tmp.rps.bc", "wb");
+    if (fp) {
+      fwrite(pOutModule->GetBufferPointer(), 1, pOutModule->GetBufferSize(),
+             fp);
+      fclose(fp);
+    }
+  }
+
+  return pOutModule;
+}
+
+void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC) {
+  ComPtr<IDxcCompiler> pCompiler;
+
+  ThrowIfFailed(
+      g_pfnDxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&pCompiler)));
+
+  ComPtr<IDxcBlobEncoding> pDisasm;
+  ThrowIfFailed(pCompiler->Disassemble(pRpsBC.Get(), &pDisasm));
+
+  FILE *fp = {};
+  fopen_s(&fp, "tmp.rps.ll", "wb");
+  if (fp) {
+    fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
+    fclose(fp);
+  }
+}
+
+int main(const int argc, const char *argv[]) {
+  LoadDxc();
+
+  auto pCode = CompileHlslToDxil(argv[1]);
+
+  auto pRpsBC = CompileDxilToAsm(pCode);
+
+  DisassembleRps(pRpsBC);
+
+  // system("llc.exe -filetype=obj -mtriple=x86_64-pc-win32 tmp.rps.ll");
+  // system("llc.exe -filetype=asm -mtriple=x86_64-pc-win32
+  // --x86-asm-syntax=intel tmp.rps.ll");
+
+  system("llvm-cbe.exe tmp.rps.ll");
+
+  return 0;
+}
