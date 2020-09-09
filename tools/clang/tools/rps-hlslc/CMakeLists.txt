@@ -7,7 +7,7 @@ set( LLVM_LINK_COMPONENTS
 #  DxilContainer
 #  HLSL
 #  Option     # option library
-#  Support    # just for assert and raw streams
+   Support    # just for assert and raw streams
   )
 
 add_clang_executable(rps-hlslc

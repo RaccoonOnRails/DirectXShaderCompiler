@@ -1,3 +1,4 @@
+#define NOMINMAX
 #include <Windows.h>
 #include <algorithm>
 #include <dxcapi.h>
@@ -5,6 +6,57 @@
 #include <string>
 #include <vector>
 #include <wrl/client.h>
+#include <llvm/Support/Path.h>
+#include <llvm/Support/CommandLine.h>
+
+using namespace llvm;
+
+static cl::opt<std::string> InputFilename(cl::Positional,
+                                          cl::desc("<input .rpsl file>"),
+                                          cl::init("-"));
+
+static cl::opt<std::string> OutputModuleName("m",
+                                             cl::desc("Override output module name"),
+                                             cl::init("-"));
+
+static cl::opt<std::string> OutputDirectory("od",
+                                            cl::desc("Override output directory"),
+                                            cl::init("."));
+
+static cl::opt<std::string> TempDirectory("td",
+                                          cl::desc("Override intermediate directory for temporary files"),
+                                          cl::init("."));
+
+static cl::opt<bool> OutputCbe("cbe",
+                               cl::desc("Output C file using LLVM C backend"),
+                               cl::init(true));
+
+static cl::opt<bool> OutputObj("obj",
+                               cl::desc("Output obj file compiled with llc"),
+                               cl::init(false));
+
+static cl::opt<bool> OutputAsm("asm",
+                               cl::desc("Output asm file compiled with llc"),
+                               cl::init(false));
+
+static cl::opt<bool> DumpOriginalILBin("dxil_bin",
+                                       cl::desc("Dump original DXIL blob (DXC output)"),
+                                       cl::init(false));
+
+static cl::opt<bool> DumpRpsILBin("rpsll_bin",
+                                  cl::desc("Dump processed LLVM IL blob (RPS transform pass output)"),
+                                  cl::init(false));
+
+static cl::opt<bool> DumpOriginalIL("dxil",
+                                    cl::desc("Dump original DXIL text (DXC output)"),
+                                    cl::init(false));
+
+static cl::opt<bool> DumpRpsIL("rpsll",
+                               cl::desc("Dump processed LLVM IL text (RPS transform pass output)"),
+                               cl::init(false));
+
+static std::string OutputFileStem;
+static std::string OutputFileDirectoryAndStem;
 
 // Loader
 HMODULE g_DxcDll = {};
@@ -381,9 +433,9 @@ ComPtr<IDxcBlob> CompileHlslToDxil(const char *fileName) {
   arguments.push_back(L"-default-linkage");
   arguments.push_back(L"external");
 
-  size_t nConv;
-  wchar_t fileNameW[MAX_PATH];
-  mbstowcs_s(&nConv, fileNameW, fileName, _countof(fileNameW));
+  size_t nConv = 0;
+  wchar_t fileNameW[MAX_PATH + 1];
+  mbstowcs_s(&nConv, fileNameW, fileName, _countof(fileNameW) - 1);
 
   ComPtr<IDxcOperationResult> pResult;
   HRESULT hr = pCompiler->Compile(
@@ -456,25 +508,36 @@ ComPtr<IDxcBlob> CompileDxilToAsm(const ComPtr<IDxcBlob> &pShader) {
   ComPtr<IDxcBlob> pOutModule;
 
   if (bFoundRpsPass) {
-    LPCWSTR options[] = {
-        L"-dxil-2-rps",
-    };
+    std::vector<LPCWSTR> arguments;
+    arguments.push_back(L"-dxil-2-rps");
+
+    if (OutputModuleName != "-") {
+      arguments.push_back(L"-module-name");
+
+      wchar_t stemW[MAX_PATH];
+
+      size_t nConv = 0;
+      mbstowcs_s(&nConv, stemW, OutputModuleName.c_str(), _countof(stemW) - 1);
+      arguments.push_back(stemW);
+    }
 
     ComPtr<IDxcBlobEncoding> pOutText;
 
-    ThrowIfFailed(pOptimizer->RunOptimizer(
-        pShader.Get(), options, _countof(options), &pOutModule, &pOutText));
+    ThrowIfFailed(pOptimizer->RunOptimizer(pShader.Get(), arguments.data(),
+                                           arguments.size(), &pOutModule,
+                                           &pOutText));
 
     if (pOutText) {
       printf("\n%s", (char *)pOutText->GetBufferPointer());
     }
 
-    FILE *fp = {};
-    fopen_s(&fp, "tmp.rps.bc", "wb");
-    if (fp) {
-      fwrite(pOutModule->GetBufferPointer(), 1, pOutModule->GetBufferSize(),
-             fp);
-      fclose(fp);
+    if (DumpRpsILBin.getValue()) {
+      FILE *fp = {};
+      fopen_s(&fp, (OutputFileDirectoryAndStem + ".rps.bc").c_str(), "wb");
+      if (fp) {
+        fwrite(pOutModule->GetBufferPointer(), 1, pOutModule->GetBufferSize(), fp);
+        fclose(fp);
+      }
     }
   }
 
@@ -499,19 +562,37 @@ void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC) {
 }
 
 int main(const int argc, const char *argv[]) {
+  // Parse command line options.
+  cl::ParseCommandLineOptions(argc, argv, "dxil assembly\n");
+
+  if (OutputModuleName != "-") {
+    OutputFileStem = OutputModuleName;
+  } else if (llvm::sys::path::has_stem(InputFilename)) {
+    OutputFileStem = llvm::sys::path::stem(InputFilename).str();
+  } else {
+    OutputFileStem = "rps";
+  }
+
+  OutputFileDirectoryAndStem = OutputDirectory + "/" + OutputFileStem;
+
   LoadDxc();
 
-  auto pCode = CompileHlslToDxil(argv[1]);
+  auto pCode = CompileHlslToDxil(InputFilename.c_str());
 
   auto pRpsBC = CompileDxilToAsm(pCode);
 
   DisassembleRps(pRpsBC);
 
-  // system("llc.exe -filetype=obj -mtriple=x86_64-pc-win32 tmp.rps.ll");
-  // system("llc.exe -filetype=asm -mtriple=x86_64-pc-win32
-  // --x86-asm-syntax=intel tmp.rps.ll");
-
-  system("llvm-cbe.exe tmp.rps.ll");
+  if (OutputObj.getValue()) {
+    system("llc.exe -filetype=obj -mtriple=x86_64-pc-win32 tmp.rps.ll");
+  }
+  if (OutputAsm.getValue()) {
+    system("llc.exe -filetype=asm -mtriple=x86_64-pc-win32 "
+           "--x86-asm-syntax=intel tmp.rps.ll");
+  }
+  if (OutputCbe.getValue()) {
+    system(("llvm-cbe.exe tmp.rps.ll -o " + OutputFileStem + ".rpsl.g.c").c_str());
+  }
 
   return 0;
 }

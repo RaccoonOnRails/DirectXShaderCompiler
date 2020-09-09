@@ -41,8 +41,9 @@ struct DxilToRps : public ModulePass {
 
   bool runOnModule(Module &M) override {
     auto voidType = Type::getVoidTy(M.getContext());
+    auto intType = Type::getInt32Ty(M.getContext());
     auto nodeCallFunc =
-        M.getOrInsertFunction("__rps_node_call", voidType, nullptr);
+        M.getOrInsertFunction("__rps_node_call", voidType, intType, nullptr);
     m_RpsNodeCallFunc = dyn_cast<Function>(nodeCallFunc);
     m_RpsNodeCallFunc->setLinkage(GlobalValue::ExternalLinkage);
 
@@ -83,9 +84,6 @@ struct DxilToRps : public ModulePass {
         libFuncIter->second = calleeF;
       }
 
-      auto idnew = C->getCallingConv();
-      printf("\n%d", idnew);
-
       printf("\n        Replaced: %s => %s", demangledName.str().c_str(),
              C->getCalledFunction()->getName().str().c_str());
     }
@@ -94,6 +92,10 @@ struct DxilToRps : public ModulePass {
   bool runOnFunction(Function &F) {
 
     llvm::SmallVector<CallInst *, 32> callInsts;
+
+    if (!F.empty() && (F.getLinkage() == GlobalValue::ExternalLinkage)) {
+      F.setName(DemangleNames(F.getName()));
+    }
 
     for (auto bbIter = F.begin(); bbIter != F.end(); ++bbIter) {
       for (auto inst = bbIter->begin(); inst != bbIter->end(); ++inst) {
@@ -152,14 +154,7 @@ struct DxilToRps : public ModulePass {
             firstPushInst = firstPushInst ? firstPushInst : pushInst;
           }
 
-          auto nodeDefIndxAsPtrVal = ConstantExpr::getIntToPtr(
-              nodeDefIdxVal, Type::getInt8PtrTy(F.getContext()));
-          auto pushNodeIdInst =
-              CallInst::Create(m_RpsNodeParamPushFunc, {nodeDefIndxAsPtrVal});
-          pushNodeIdInst->insertBefore(callInst);
-
-          auto replaceCallInst = CallInst::Create(m_RpsNodeCallFunc);
-          replaceCallInst->insertBefore(callInst);
+          CallInst::Create(m_RpsNodeCallFunc, { nodeDefIdxVal }, "", callInst);
 
           callInsts.push_back(callInst);
         }
@@ -234,7 +229,7 @@ struct DxilToRps : public ModulePass {
     auto arrayValue = ConstantArray::get(stringArrayType, stringConstants);
 
     auto nodedefNameArrayVar = dyn_cast<GlobalVariable>(
-        M.getOrInsertGlobal("__rps_nodedefs", stringArrayType));
+        M.getOrInsertGlobal("__rps_nodedefs" + M.getName().str(), stringArrayType));
     nodedefNameArrayVar->setLinkage(GlobalVariable::ExternalLinkage);
     nodedefNameArrayVar->setAlignment(4);
     nodedefNameArrayVar->setInitializer(arrayValue);
@@ -273,8 +268,8 @@ struct DxilToRps : public ModulePass {
 
     auto arrayValue = ConstantArray::get(funcPtrArrayType, funcConstants);
 
-    auto exportEntryArrayVar = dyn_cast<GlobalVariable>(
-        M.getOrInsertGlobal("__rps_entries", funcPtrArrayType));
+    auto exportEntryArrayVar = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(
+        "__rps_entries" + M.getName().str(), funcPtrArrayType));
     exportEntryArrayVar->setLinkage(GlobalVariable::ExternalLinkage);
     exportEntryArrayVar->setAlignment(4);
     exportEntryArrayVar->setInitializer(arrayValue);
