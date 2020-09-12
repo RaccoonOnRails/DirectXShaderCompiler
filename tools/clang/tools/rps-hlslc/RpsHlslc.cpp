@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <functional>
 #include <wrl/client.h>
 #include <llvm/Support/Path.h>
 #include <llvm/Support/CommandLine.h>
@@ -92,10 +93,11 @@ struct nodeidentifier { uint unused; };
 __RPS_DECL_HANDLE(resource);
 __RPS_DECL_HANDLE(view);
 __RPS_DECL_HANDLE(rtv);
+__RPS_DECL_HANDLE(dsv);
 __RPS_DECL_HANDLE(srv);
 __RPS_DECL_HANDLE(uav);
 
-#define __RPS_BEGIN_DECL_ENUM(X) struct X { uint _value; }; namespace rps { namespace X { typedef struct X __RPS_ENUM_TYPE;
+#define __RPS_BEGIN_DECL_ENUM(X) struct X { uint _value; static struct X or(struct X a, struct X b) { struct X x; x._value = a._value | b._value; return x; } }; namespace rps { namespace X { typedef struct X __RPS_ENUM_TYPE;
 #define __RPS_ENUM_VALUE(N, V) static const __RPS_ENUM_TYPE N = { V };
 #define __RPS_END_DECL_ENUM() } }
 
@@ -200,7 +202,27 @@ __RPS_BEGIN_DECL_ENUM(format)
     __RPS_ENUM_VALUE(b8g8r8a8_unorm_srgb      , 91)
     __RPS_ENUM_VALUE(b8g8r8x8_typeless        , 92)
     __RPS_ENUM_VALUE(b8g8r8x8_unorm_srgb      , 93)
+__RPS_END_DECL_ENUM()
 
+__RPS_BEGIN_DECL_ENUM(access)
+    __RPS_ENUM_VALUE(common          , 1 << 0)
+    __RPS_ENUM_VALUE(vertex_and_constant_buffer , 1 << 1)
+    __RPS_ENUM_VALUE(index_buffer    , 1 << 2)
+    __RPS_ENUM_VALUE(render_target   , 1 << 3)
+    __RPS_ENUM_VALUE(unordered_access , 1 << 4)
+    __RPS_ENUM_VALUE(depth_write     , 1 << 5)
+    __RPS_ENUM_VALUE(depth_read      , 1 << 6)
+    __RPS_ENUM_VALUE(non_ps_resource , 1 << 7)
+    __RPS_ENUM_VALUE(ps_resource     , 1 << 8)
+    __RPS_ENUM_VALUE(stream_out      , 1 << 9)
+    __RPS_ENUM_VALUE(indirect_args   , 1 << 10)
+    __RPS_ENUM_VALUE(copy_dest       , 1 << 11)
+    __RPS_ENUM_VALUE(copy_source     , 1 << 12)
+    __RPS_ENUM_VALUE(resolve_dest    , 1 << 13)
+    __RPS_ENUM_VALUE(resolve_source  , 1 << 14)
+    __RPS_ENUM_VALUE(raytracing_acceleration_structure, 1 << 15)
+    __RPS_ENUM_VALUE(shading_rate_source , 1 << 16)
+    __RPS_ENUM_VALUE(unknown         , 1 << 31)
 __RPS_END_DECL_ENUM()
 
 namespace rps
@@ -282,6 +304,7 @@ struct ResourceViewDesc
   uint BaseArraySlice;
   uint ArrayLayers;
   uint PlaneMask;
+  access AccessFlags;
 };
 
 ResourceDesc describe_resource( resource r );
@@ -331,6 +354,7 @@ inline view create_srv( resource r, uint dimension, uint baseMip, uint mipLevels
     desc.BaseArraySlice = baseArraySlice;
     desc.ArrayLayers = numArraySlices;
     desc.PlaneMask = planeMask;
+    desc.AccessFlags = access::or(rps::access::ps_resource, rps::access::non_ps_resource);
 
     return create_view( desc );
 }
@@ -346,6 +370,7 @@ inline view create_uav( resource r, uint dimension, uint baseMip, uint baseArray
     desc.BaseArraySlice = baseArraySlice;
     desc.ArrayLayers = numArraySlices;
     desc.PlaneMask = 0x1;
+    desc.AccessFlags = rps::access::unordered_access;
 
     return create_view( desc );
 }
@@ -361,6 +386,27 @@ inline view create_rtv( resource r, uint dimension, uint baseMip, uint baseArray
     desc.BaseArraySlice = baseArraySlice;
     desc.ArrayLayers = numArraySlices;
     desc.PlaneMask = 0x1;
+    desc.AccessFlags = rps::access::render_target;
+
+    return create_view( desc );
+}
+
+inline view create_dsv( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown, uint planeMask = 0x3, bool bReadonly = false )
+{
+    ResourceViewDesc desc;
+    desc.Parent = r;
+    desc.Dimension = dimension;
+    desc.Format = format;
+    desc.BaseMip = baseMip;
+    desc.Mips = 1;
+    desc.BaseArraySlice = baseArraySlice;
+    desc.ArrayLayers = numArraySlices;
+    desc.PlaneMask = planeMask; // TODO: consider format
+
+    if (bReadonly)
+        desc.AccessFlags = rps::access::depth_read;
+    else
+        desc.AccessFlags = rps::access::depth_write;
 
     return create_view( desc );
 }
@@ -371,32 +417,66 @@ inline void clear( rtv d, float4 val )
 }
 )";
 
-ComPtr<IDxcBlob> ReflectContainer(const ComPtr<IDxcBlob> &pContainer) {
+using ProcessPartCallback = std::function<ComPtr<IDxcBlob> (UINT32 part, const ComPtr<IDxcBlob>& pPart)>;
+
+ComPtr<IDxcBlob>
+ProcessContainerParts(const ComPtr<IDxcBlob> &pOriginalContainer,
+                      ProcessPartCallback processPartCb) {
   ComPtr<IDxcContainerReflection> pRefl;
   g_pfnDxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(&pRefl));
 
-  ThrowIfFailed(pRefl->Load(pContainer.Get()));
+  // This is for including debug info, but llvm-cbe doesn't work with this
+  // for now because subprogram changes in the llvm version differences.
+  #if 0
+  ComPtr<IDxcContainerBuilder> pRebuilder;
+  g_pfnDxcCreateInstance(CLSID_DxcContainerBuilder, IID_PPV_ARGS(&pRebuilder));
+  #endif
 
-  ComPtr<IDxcBlob> dxilContent;
-  UINT32 dxilIdx;
-  if (SUCCEEDED(pRefl->FindFirstPartKind('LIXD', &dxilIdx))) {
-    printf("\nFound DXIL");
+  ThrowIfFailed(pRefl->Load(pOriginalContainer.Get()));
 
-    pRefl->GetPartContent(dxilIdx, &dxilContent);
+  UINT numParts = 0;
 
-    FILE *fp = {};
-    fopen_s(&fp, "tmp.bc", "wb");
-    if (fp) {
-      fwrite(dxilContent->GetBufferPointer(), 1, dxilContent->GetBufferSize(),
-             fp);
+  if (SUCCEEDED(pRefl->GetPartCount(&numParts))) {
+
+    for (UINT iPart = 0; iPart < numParts; iPart++) {
+      ComPtr<IDxcBlob> pPartContent;
+      if (FAILED(pRefl->GetPartContent(iPart, &pPartContent))) {
+        break;
+      }
+
+      UINT32 partKind = 0;
+      pRefl->GetPartKind(iPart, &partKind);
+
+      printf("\nProcessing part %c%c%c%c",
+          partKind & 0xff,
+          (partKind >> 8) & 0xff,
+          (partKind >> 16) & 0xff,
+          (partKind >> 24) & 0xff); //'LIXD'
+
+      auto pProcessedPart = processPartCb(partKind, pPartContent);
+
+      #if 0
+      if (FAILED(pRebuilder->AddPart(partKind, pProcessedPart.Get()))) {
+        break;
+      }
+      #endif
     }
-    fclose(fp);
   }
 
-  return dxilContent;
+  #if 0
+  ComPtr<IDxcBlob> pNewContainer;
+  ComPtr<IDxcOperationResult> pBuildResult;
+  if (SUCCEEDED(pRebuilder->SerializeContainer(&pBuildResult))) {
+    pBuildResult->GetResult(&pNewContainer);
+  }
+
+  return pNewContainer;
+  #endif
+
+  return nullptr;
 }
 
-ComPtr<IDxcBlob> CompileHlslToDxil(const char *fileName) {
+ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   ComPtr<IDxcLibrary> pLibrary;
   ThrowIfFailed(
       g_pfnDxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&pLibrary)));
@@ -427,15 +507,17 @@ ComPtr<IDxcBlob> CompileHlslToDxil(const char *fileName) {
   ThrowIfFailed(
       g_pfnDxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&pCompiler)));
 
+  size_t nConv = 0;
+  wchar_t fileNameW[MAX_PATH + 1];
+  mbstowcs_s(&nConv, fileNameW, fileName, _countof(fileNameW) - 1);
+
   std::vector<LPCWSTR> arguments;
 
   arguments.push_back(L"-Vd");
   arguments.push_back(L"-default-linkage");
   arguments.push_back(L"external");
 
-  size_t nConv = 0;
-  wchar_t fileNameW[MAX_PATH + 1];
-  mbstowcs_s(&nConv, fileNameW, fileName, _countof(fileNameW) - 1);
+  arguments.push_back(L"-Zi");
 
   ComPtr<IDxcOperationResult> pResult;
   HRESULT hr = pCompiler->Compile(
@@ -468,18 +550,30 @@ ComPtr<IDxcBlob> CompileHlslToDxil(const char *fileName) {
     ComPtr<IDxcBlobEncoding> pDisasm;
     ThrowIfFailed(pCompiler->Disassemble(pContainer.Get(), &pDisasm));
 
-    fp = {};
-    fopen_s(&fp, "tmp.ll", "wb");
-    if (fp) {
-      fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
+    if (DumpOriginalIL) {
+      fp = {};
+      fopen_s(&fp, (std::string(fileName) + ".dxil.txt").c_str(), "wb");
+      if (fp) {
+        fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
+      }
+      fclose(fp);
     }
-    fclose(fp);
+
+    if (DumpOriginalILBin) {
+      fp = {};
+      fopen_s(&fp, (std::string(fileName) + ".dxil.blob").c_str(), "wb");
+      if (fp) {
+        fwrite(pContainer->GetBufferPointer(), 1, pContainer->GetBufferSize(),
+               fp);
+      }
+      fclose(fp);
+    }
   }
 
-  return ReflectContainer(pContainer);
+  return pContainer;
 }
 
-ComPtr<IDxcBlob> CompileDxilToAsm(const ComPtr<IDxcBlob> &pShader) {
+ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
   ComPtr<IDxcOptimizer> pOptimizer;
   ThrowIfFailed(
       g_pfnDxcCreateInstance(CLSID_DxcOptimizer, IID_PPV_ARGS(&pOptimizer)));
@@ -505,7 +599,7 @@ ComPtr<IDxcBlob> CompileDxilToAsm(const ComPtr<IDxcBlob> &pShader) {
 
   printf("%s dxil-2-rps pass.", bFoundRpsPass ? "Found" : "Didn't find");
 
-  ComPtr<IDxcBlob> pOutModule;
+  ComPtr<IDxcBlob> pOutContianer;
 
   if (bFoundRpsPass) {
     std::vector<LPCWSTR> arguments;
@@ -521,30 +615,42 @@ ComPtr<IDxcBlob> CompileDxilToAsm(const ComPtr<IDxcBlob> &pShader) {
       arguments.push_back(stemW);
     }
 
-    ComPtr<IDxcBlobEncoding> pOutText;
+    auto processDxil = ProcessPartCallback(
+        [&](UINT32 partKind,
+            const ComPtr<IDxcBlob> &pPart) -> ComPtr<IDxcBlob> {
+          ComPtr<IDxcBlob> pOutPart = pPart;
+          ComPtr<IDxcBlobEncoding> pOutText;
+          if (partKind == 'LIXD') {
+            ThrowIfFailed(pOptimizer->RunOptimizer(
+                pPart.Get(), arguments.data(), arguments.size(), &pOutPart,
+                &pOutText));
 
-    ThrowIfFailed(pOptimizer->RunOptimizer(pShader.Get(), arguments.data(),
-                                           arguments.size(), &pOutModule,
-                                           &pOutText));
+            pOutContianer = pOutPart;
 
-    if (pOutText) {
-      printf("\n%s", (char *)pOutText->GetBufferPointer());
-    }
+            if (pOutText) {
+              printf("\n%s", (char *)pOutText->GetBufferPointer());
+            }
+          }
+          return pOutPart;
+        });
+
+    ProcessContainerParts(pContainer, processDxil);
 
     if (DumpRpsILBin.getValue()) {
       FILE *fp = {};
-      fopen_s(&fp, (OutputFileDirectoryAndStem + ".rps.bc").c_str(), "wb");
+      fopen_s(&fp, (OutputFileDirectoryAndStem + ".rps.blob").c_str(), "wb");
       if (fp) {
-        fwrite(pOutModule->GetBufferPointer(), 1, pOutModule->GetBufferSize(), fp);
+        fwrite(pOutContianer->GetBufferPointer(), 1,
+               pOutContianer->GetBufferSize(), fp);
         fclose(fp);
       }
     }
   }
 
-  return pOutModule;
+  return pOutContianer;
 }
 
-void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC) {
+void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC, const char* tmpFileName) {
   ComPtr<IDxcCompiler> pCompiler;
 
   ThrowIfFailed(
@@ -554,7 +660,7 @@ void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC) {
   ThrowIfFailed(pCompiler->Disassemble(pRpsBC.Get(), &pDisasm));
 
   FILE *fp = {};
-  fopen_s(&fp, "tmp.rps.ll", "wb");
+  fopen_s(&fp, tmpFileName, "wb");
   if (fp) {
     fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
     fclose(fp);
@@ -573,25 +679,37 @@ int main(const int argc, const char *argv[]) {
     OutputFileStem = "rps";
   }
 
+  // Force module name if using cbe for static linking
+  if ((OutputModuleName == "-") && OutputCbe) {
+    OutputModuleName = OutputFileStem;
+  }
+
   OutputFileDirectoryAndStem = OutputDirectory + "/" + OutputFileStem;
 
   LoadDxc();
 
-  auto pCode = CompileHlslToDxil(InputFilename.c_str());
+  auto pCode = CompileHlslToDxilContainer(InputFilename.c_str());
 
-  auto pRpsBC = CompileDxilToAsm(pCode);
+  auto pRpsBC = ConvertDxilToRps(pCode);
 
-  DisassembleRps(pRpsBC);
+  auto tmpRpsLLFile = OutputFileStem + ".tmp.rps.ll";
+
+  DisassembleRps(pRpsBC, tmpRpsLLFile.c_str());
 
   if (OutputObj.getValue()) {
-    system("llc.exe -filetype=obj -mtriple=x86_64-pc-win32 tmp.rps.ll");
+    system(("llc.exe -filetype=obj -mtriple=x86_64-pc-win32 " + tmpRpsLLFile)
+               .c_str());
   }
   if (OutputAsm.getValue()) {
-    system("llc.exe -filetype=asm -mtriple=x86_64-pc-win32 "
-           "--x86-asm-syntax=intel tmp.rps.ll");
+    system(("llc.exe -filetype=asm -mtriple=x86_64-pc-win32 "
+            "--x86-asm-syntax=intel " +
+            tmpRpsLLFile)
+               .c_str());
   }
   if (OutputCbe.getValue()) {
-    system(("llvm-cbe.exe tmp.rps.ll -o " + OutputFileStem + ".rpsl.g.c").c_str());
+    system(
+        ("llvm-cbe.exe " + tmpRpsLLFile + " -o " + OutputFileStem + ".rpsl.g.c")
+            .c_str());
   }
 
   return 0;

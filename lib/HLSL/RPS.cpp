@@ -38,20 +38,38 @@ struct DxilToRps : public ModulePass {
   std::vector<StringRef> m_RpsNodeNames = {};
   StringMap<int32_t> m_RpsNodeNameIndice = {};
   StringMap<Function *> m_RpsLibFuncs = {};
+  GlobalVariable *m_ModuleIdGlobal = nullptr;
+
+  enum class NodeParamTypeCategory {
+    Resource,
+    View,
+    RawBytes,
+  };
+
+  static StringRef AddModuleNamePostfix(const char *prefix, Module &M) {
+    return (prefix + std::string(M.getName().empty() ? "" : "_") + M.getName()).str();
+  }
 
   bool runOnModule(Module &M) override {
     auto voidType = Type::getVoidTy(M.getContext());
     auto intType = Type::getInt32Ty(M.getContext());
     auto nodeCallFunc =
-        M.getOrInsertFunction("__rps_node_call", voidType, intType, nullptr);
+        M.getOrInsertFunction("__rps_node_call", voidType, intType, intType, nullptr); // ModuleId, NodeId
     m_RpsNodeCallFunc = dyn_cast<Function>(nodeCallFunc);
     m_RpsNodeCallFunc->setLinkage(GlobalValue::ExternalLinkage);
 
     auto int8PtrType = Type::getInt8PtrTy(M.getContext());
     auto paramPushFunc =
-        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType, nullptr);
+        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType, intType, intType, nullptr);
     m_RpsNodeParamPushFunc = dyn_cast<Function>(paramPushFunc);
     m_RpsNodeParamPushFunc->setLinkage(GlobalValue::ExternalLinkage);
+
+    m_ModuleIdGlobal = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(AddModuleNamePostfix("__rps_module_id", M), intType));
+
+    ConstantInt *constIntZero = ConstantInt::get(M.getContext(), APInt(32, 0));
+    m_ModuleIdGlobal->setInitializer(constIntZero);
+    m_ModuleIdGlobal->setLinkage(GlobalValue::ExternalLinkage);
+    m_ModuleIdGlobal->setConstant(false);
 
     m_RpsLibFuncs.insert(std::make_pair("describe_resource", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("describe_view", nullptr));
@@ -61,7 +79,7 @@ struct DxilToRps : public ModulePass {
 
     for (auto &F : M) {
       printf("\nFunction %s", F.getName().data());
-      runOnFunction(F);
+      runOnFunction(M, F);
     }
 
     WriteNodeTable(M);
@@ -89,7 +107,21 @@ struct DxilToRps : public ModulePass {
     }
   }
 
-  bool runOnFunction(Function &F) {
+  NodeParamTypeCategory GetNodeParamTypeCategory(Module &M, Type *pType) {
+    if (pType->isStructTy()) {
+      auto name = pType->getStructName();
+
+      if ((name == "struct.srv") || (name == "struct.rtv") ||
+          (name == "struct.uav") || (name == "struct.view")) {
+        return NodeParamTypeCategory::View;
+      } else if (name == "struct.resource") {
+        return NodeParamTypeCategory::Resource;
+      }
+    }
+    return NodeParamTypeCategory::RawBytes;
+  }
+
+  bool runOnFunction(Module& M, Function &F) {
 
     llvm::SmallVector<CallInst *, 32> callInsts;
 
@@ -149,12 +181,31 @@ struct DxilToRps : public ModulePass {
             firstCastInst = firstCastInst ? firstCastInst : argAsBytePtrVal;
 
 
-            auto pushInst = CallInst::Create(m_RpsNodeParamPushFunc, { argAsBytePtrVal }, "", callInst);
+            Type *pArgType = argValue->getType();
+            if (pArgType->isPointerTy()) {
+              pArgType = dyn_cast<PointerType>(pArgType)->getElementType();
+            }
+
+            ConstantInt *argSizeInBytesVal = ConstantInt::get(
+                M.getContext(), APInt(32, M.getDataLayout().getTypeAllocSize(pArgType)));
+
+            NodeParamTypeCategory paramTypeCategory =
+                GetNodeParamTypeCategory(M, pArgType);
+
+            ConstantInt *paramTypeCategoryVal = ConstantInt::get(
+                M.getContext(), APInt(32, uint32_t(paramTypeCategory)));
+
+            auto pushInst = CallInst::Create(
+                m_RpsNodeParamPushFunc,
+                { argAsBytePtrVal, argSizeInBytesVal, paramTypeCategoryVal },
+                "", callInst);
 
             firstPushInst = firstPushInst ? firstPushInst : pushInst;
           }
 
-          CallInst::Create(m_RpsNodeCallFunc, { nodeDefIdxVal }, "", callInst);
+          auto loadModuleId = new LoadInst(m_ModuleIdGlobal, "", callInst);
+          CallInst::Create(m_RpsNodeCallFunc, { loadModuleId, nodeDefIdxVal }, "",
+                           callInst);
 
           callInsts.push_back(callInst);
         }
@@ -228,8 +279,9 @@ struct DxilToRps : public ModulePass {
 
     auto arrayValue = ConstantArray::get(stringArrayType, stringConstants);
 
-    auto nodedefNameArrayVar = dyn_cast<GlobalVariable>(
-        M.getOrInsertGlobal("__rps_nodedefs" + M.getName().str(), stringArrayType));
+    auto nodedefNameArrayVar = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(
+        AddModuleNamePostfix("__rps_nodedefs", M),
+        stringArrayType));
     nodedefNameArrayVar->setLinkage(GlobalVariable::ExternalLinkage);
     nodedefNameArrayVar->setAlignment(4);
     nodedefNameArrayVar->setInitializer(arrayValue);
@@ -269,7 +321,9 @@ struct DxilToRps : public ModulePass {
     auto arrayValue = ConstantArray::get(funcPtrArrayType, funcConstants);
 
     auto exportEntryArrayVar = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(
-        "__rps_entries" + M.getName().str(), funcPtrArrayType));
+        AddModuleNamePostfix("__rps_entries", M),
+        funcPtrArrayType));
+
     exportEntryArrayVar->setLinkage(GlobalVariable::ExternalLinkage);
     exportEntryArrayVar->setAlignment(4);
     exportEntryArrayVar->setInitializer(arrayValue);
