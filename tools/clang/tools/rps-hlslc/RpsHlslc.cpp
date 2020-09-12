@@ -1,5 +1,6 @@
 #define NOMINMAX
 #include <Windows.h>
+#include <Shlobj.h>
 #include <algorithm>
 #include <dxcapi.h>
 #include <sstream>
@@ -671,6 +672,14 @@ int main(const int argc, const char *argv[]) {
   // Parse command line options.
   cl::ParseCommandLineOptions(argc, argv, "dxil assembly\n");
 
+  char currExecPath[MAX_PATH];
+  ::GetModuleFileNameA(nullptr, currExecPath, _countof(currExecPath));
+  auto currExecDir = llvm::sys::path::parent_path(currExecPath).str();
+
+  SHCreateDirectoryExA(NULL, OutputDirectory.c_str(), NULL);
+
+  printf("Using rps-hlslc.exe in %s", currExecDir.c_str());
+
   if (OutputModuleName != "-") {
     OutputFileStem = OutputModuleName;
   } else if (llvm::sys::path::has_stem(InputFilename)) {
@@ -692,25 +701,30 @@ int main(const int argc, const char *argv[]) {
 
   auto pRpsBC = ConvertDxilToRps(pCode);
 
-  auto tmpRpsLLFile = OutputFileStem + ".tmp.rps.ll";
+  auto tmpRpsLLFile = OutputDirectory + "/" + OutputFileStem + ".tmp.rps.ll";
 
   DisassembleRps(pRpsBC, tmpRpsLLFile.c_str());
 
+  int result = 0;
+
+#if 0 // TODO : non-cbe code generators
   if (OutputObj.getValue()) {
-    system(("llc.exe -filetype=obj -mtriple=x86_64-pc-win32 " + tmpRpsLLFile)
+    system((currExecDir + "/llc.exe -filetype=obj -mtriple=x86_64-pc-win32 " + tmpRpsLLFile)
                .c_str());
   }
   if (OutputAsm.getValue()) {
-    system(("llc.exe -filetype=asm -mtriple=x86_64-pc-win32 "
+    system((currExecDir + "/llc.exe -filetype=asm -mtriple=x86_64-pc-win32 "
             "--x86-asm-syntax=intel " +
             tmpRpsLLFile)
                .c_str());
   }
+#endif
+
   if (OutputCbe.getValue()) {
-    system(
-        ("llvm-cbe.exe " + tmpRpsLLFile + " -o " + OutputFileStem + ".rpsl.g.c")
-            .c_str());
+    result = system((currExecDir + "/llvm-cbe.exe " + tmpRpsLLFile +
+                     " -o " + OutputFileDirectoryAndStem + ".rpsl.g.c")
+                        .c_str());
   }
 
-  return 0;
+  return result;
 }
