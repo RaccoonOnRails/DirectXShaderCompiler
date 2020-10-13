@@ -11,6 +11,8 @@
 #include <llvm/Support/Path.h>
 #include <llvm/Support/CommandLine.h>
 
+#define RPS_ENABLE_DEBUG_INFO 1
+
 using namespace llvm;
 
 static cl::opt<std::string> InputFilename(cl::Positional,
@@ -426,12 +428,12 @@ ProcessContainerParts(const ComPtr<IDxcBlob> &pOriginalContainer,
   ComPtr<IDxcContainerReflection> pRefl;
   g_pfnDxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(&pRefl));
 
-  // This is for including debug info, but llvm-cbe doesn't work with this
-  // for now because subprogram changes in the llvm version differences.
-  #if 0
+// This is for including debug info, but llvm-cbe doesn't work with this
+// for now because subprogram changes in the llvm version differences.
+#if RPS_ENABLE_DEBUG_INFO
   ComPtr<IDxcContainerBuilder> pRebuilder;
   g_pfnDxcCreateInstance(CLSID_DxcContainerBuilder, IID_PPV_ARGS(&pRebuilder));
-  #endif
+#endif
 
   ThrowIfFailed(pRefl->Load(pOriginalContainer.Get()));
 
@@ -448,33 +450,28 @@ ProcessContainerParts(const ComPtr<IDxcBlob> &pOriginalContainer,
       UINT32 partKind = 0;
       pRefl->GetPartKind(iPart, &partKind);
 
-      printf("\nProcessing part %c%c%c%c",
-          partKind & 0xff,
-          (partKind >> 8) & 0xff,
-          (partKind >> 16) & 0xff,
-          (partKind >> 24) & 0xff); //'LIXD'
+      printf("\nProcessing part %c%c%c%c", partKind & 0xff,
+             (partKind >> 8) & 0xff, (partKind >> 16) & 0xff,
+             (partKind >> 24) & 0xff); //'LIXD'
 
       auto pProcessedPart = processPartCb(partKind, pPartContent);
 
-      #if 0
+#if RPS_ENABLE_DEBUG_INFO
       if (FAILED(pRebuilder->AddPart(partKind, pProcessedPart.Get()))) {
         break;
       }
-      #endif
+#endif
     }
   }
 
-  #if 0
-  ComPtr<IDxcBlob> pNewContainer;
+  ComPtr<IDxcBlob> pNewContainer = pOriginalContainer;
+#if RPS_ENABLE_DEBUG_INFO
   ComPtr<IDxcOperationResult> pBuildResult;
   if (SUCCEEDED(pRebuilder->SerializeContainer(&pBuildResult))) {
     pBuildResult->GetResult(&pNewContainer);
   }
-
+#endif
   return pNewContainer;
-  #endif
-
-  return nullptr;
 }
 
 ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
@@ -519,6 +516,7 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   arguments.push_back(L"external");
 
   arguments.push_back(L"-Zi");
+  arguments.push_back(L"-res_may_alias");
 
   ComPtr<IDxcOperationResult> pResult;
   HRESULT hr = pCompiler->Compile(
@@ -635,7 +633,11 @@ ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
           return pOutPart;
         });
 
-    ProcessContainerParts(pContainer, processDxil);
+    auto pProcessedContainer = ProcessContainerParts(pContainer, processDxil);
+
+#if RPS_ENABLE_DEBUG_INFO
+    pOutContianer = pProcessedContainer;
+#endif
 
     if (DumpRpsILBin.getValue()) {
       FILE *fp = {};
