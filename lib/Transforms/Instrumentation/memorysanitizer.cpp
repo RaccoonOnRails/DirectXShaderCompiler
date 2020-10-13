@@ -2146,6 +2146,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   // \brief Returns a signed counterpart for an (un)signed-saturate-and-pack
   // intrinsic.
   Intrinsic::ID getSignedPackIntrinsic(Intrinsic::ID id) {
+#if RPS_CBE_UNHACK
     switch (id) {
       case llvm::Intrinsic::x86_sse2_packsswb_128:
       case llvm::Intrinsic::x86_sse2_packuswb_128:
@@ -2172,6 +2173,9 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       default:
         llvm_unreachable("unexpected intrinsic id");
     }
+#else
+      llvm_unreachable("unexpected intrinsic id");
+#endif
   }
 
   // \brief Instrument vector pack instrinsic.
@@ -2256,6 +2260,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     case llvm::Intrinsic::bswap:
       handleBswap(I);
       break;
+#if 0
     case llvm::Intrinsic::x86_avx512_cvtsd2usi64:
     case llvm::Intrinsic::x86_avx512_cvtsd2usi:
     case llvm::Intrinsic::x86_avx512_cvtss2usi64:
@@ -2393,7 +2398,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     case llvm::Intrinsic::x86_mmx_pmadd_wd:
       handleVectorPmaddIntrinsic(I, 16);
       break;
-
+#endif
     default:
       if (!handleUnknownIntrinsic(I))
         visitInstruction(I);

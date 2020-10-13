@@ -1,5 +1,5 @@
 add_subdirectory(Utils)
-# add_subdirectory(Instrumentation) # HLSL Change
+add_subdirectory(Instrumentation) # HLSL Change # RPS Change
 add_subdirectory(InstCombine)
 add_subdirectory(Scalar)
 add_subdirectory(IPO)

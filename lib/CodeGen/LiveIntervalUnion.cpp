@@ -188,7 +188,11 @@ void LiveIntervalUnion::Array::init(LiveIntervalUnion::Allocator &Alloc,
     return;
   clear();
   Size = NSize;
+#ifndef RPS_CBE_UNHACK
+  LIUs = reinterpret_cast<LiveIntervalUnion*>(
+#else
   LIUs = static_cast<LiveIntervalUnion*>(
+#endif
     new char[sizeof(LiveIntervalUnion)*NSize]); // HLSL Change: Use overridable operator new
   for (unsigned i = 0; i != Size; ++i)
     new(LIUs + i) LiveIntervalUnion(Alloc);
@@ -199,7 +203,11 @@ void LiveIntervalUnion::Array::clear() {
     return;
   for (unsigned i = 0; i != Size; ++i)
     LIUs[i].~LiveIntervalUnion();
+#ifndef RPS_CBE_UNHACK
+  delete[] reinterpret_cast<char *>(LIUs); // HLSL Change: Use overridable operator delete
+#else
   delete[] static_cast<char*>(LIUs); // HLSL Change: Use overridable operator delete
+#endif
   Size =  0;
   LIUs = nullptr;
 }

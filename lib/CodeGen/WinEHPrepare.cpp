@@ -1373,6 +1373,7 @@ Function *WinEHPrepare::createHandlerFunc(Function *ParentFn, Type *RetTy,
   if (TheTriple.getArch() == Triple::x86_64) {
     ParentFP = &(Handler->getArgumentList().back());
   } else {
+#if RPS_CBE_UNHACK
     assert(M);
     Function *FrameAddressFn =
         Intrinsic::getDeclaration(M, Intrinsic::frameaddress);
@@ -1383,6 +1384,7 @@ Function *WinEHPrepare::createHandlerFunc(Function *ParentFn, Type *RetTy,
         Builder.CreateCall(FrameAddressFn, {Builder.getInt32(1)}, "ebp");
     Value *ParentI8Fn = Builder.CreateBitCast(ParentFn, Int8PtrType);
     ParentFP = Builder.CreateCall(RecoverFPFn, {ParentI8Fn, EBP});
+#endif
   }
   return Handler;
 }

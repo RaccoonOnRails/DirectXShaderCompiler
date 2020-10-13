@@ -931,6 +931,9 @@ public:
 
 // This is useful when building IndexedMaps keyed on virtual registers
 struct VirtReg2IndexFunctor {
+#ifndef RPS_CBE_UNHACK  
+  using argument_type = unsigned;
+#endif  
   unsigned operator()(unsigned Reg) const {
     return TargetRegisterInfo::virtReg2Index(Reg);
   }

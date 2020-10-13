@@ -142,7 +142,7 @@ void ThreadSanitizer::initializeCallbacks(Module &M) {
       M.getOrInsertFunction("__tsan_func_exit", IRB.getVoidTy(), nullptr));
   OrdTy = IRB.getInt32Ty();
   for (size_t i = 0; i < kNumberOfAccessSizes; ++i) {
-    const size_t ByteSize = 1 << i;
+    const size_t ByteSize = size_t(1) << i;
     const size_t BitSize = ByteSize * 8;
     SmallString<32> ReadName("__tsan_read" + itostr(ByteSize));
     TsanRead[i] = checkSanitizerInterfaceFunction(M.getOrInsertFunction(
@@ -513,7 +513,7 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     int Idx = getMemoryAccessFuncIndex(Addr, DL);
     if (Idx < 0)
       return false;
-    const size_t ByteSize = 1 << Idx;
+    const size_t ByteSize = size_t(1) << Idx;
     const size_t BitSize = ByteSize * 8;
     Type *Ty = Type::getIntNTy(IRB.getContext(), BitSize);
     Type *PtrTy = Ty->getPointerTo();
@@ -527,7 +527,7 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     int Idx = getMemoryAccessFuncIndex(Addr, DL);
     if (Idx < 0)
       return false;
-    const size_t ByteSize = 1 << Idx;
+    const size_t ByteSize = size_t(1) << Idx;
     const size_t BitSize = ByteSize * 8;
     Type *Ty = Type::getIntNTy(IRB.getContext(), BitSize);
     Type *PtrTy = Ty->getPointerTo();
@@ -544,7 +544,7 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     Function *F = TsanAtomicRMW[RMWI->getOperation()][Idx];
     if (!F)
       return false;
-    const size_t ByteSize = 1 << Idx;
+    const size_t ByteSize = size_t(1) << Idx;
     const size_t BitSize = ByteSize * 8;
     Type *Ty = Type::getIntNTy(IRB.getContext(), BitSize);
     Type *PtrTy = Ty->getPointerTo();
@@ -558,7 +558,7 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     int Idx = getMemoryAccessFuncIndex(Addr, DL);
     if (Idx < 0)
       return false;
-    const size_t ByteSize = 1 << Idx;
+    const size_t ByteSize = size_t(1) << Idx;
     const size_t BitSize = ByteSize * 8;
     Type *Ty = Type::getIntNTy(IRB.getContext(), BitSize);
     Type *PtrTy = Ty->getPointerTo();

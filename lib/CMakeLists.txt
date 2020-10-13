@@ -2,13 +2,13 @@
 
 add_subdirectory(IR)
 add_subdirectory(IRReader)
-# add_subdirectory(CodeGen) # HLSL Change
+add_subdirectory(CodeGen) # HLSL Change # RPS Change
 add_subdirectory(Bitcode)
 add_subdirectory(Transforms)
 add_subdirectory(Linker)
 add_subdirectory(Analysis)
 add_subdirectory(LTO)
-# add_subdirectory(MC) # HLSL Change
+add_subdirectory(MC) # HLSL Change # RPS Change
 # add_subdirectory(Object) # HLSL Change
 add_subdirectory(Option)
 # add_subdirectory(DebugInfo) # HLSL Change
