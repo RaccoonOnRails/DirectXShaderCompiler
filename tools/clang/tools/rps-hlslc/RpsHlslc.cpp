@@ -619,7 +619,7 @@ ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
             const ComPtr<IDxcBlob> &pPart) -> ComPtr<IDxcBlob> {
           ComPtr<IDxcBlob> pOutPart = pPart;
           ComPtr<IDxcBlobEncoding> pOutText;
-          if (partKind == 'LIXD') {
+          if ((partKind == 'BDLI')) { // || (partKind == 'LIXD')
             ThrowIfFailed(pOptimizer->RunOptimizer(
                 pPart.Get(), arguments.data(), arguments.size(), &pOutPart,
                 &pOutText));
@@ -635,7 +635,7 @@ ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
 
     auto pProcessedContainer = ProcessContainerParts(pContainer, processDxil);
 
-#if RPS_ENABLE_DEBUG_INFO
+#if 0 && RPS_ENABLE_DEBUG_INFO
     pOutContianer = pProcessedContainer;
 #endif
 
