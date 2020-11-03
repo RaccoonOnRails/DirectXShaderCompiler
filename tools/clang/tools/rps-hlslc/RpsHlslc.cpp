@@ -90,7 +90,17 @@ void ThrowIfFailed(HRESULT hr) {
 
 static const char c_RpsHeader[] = R"(
 struct nodeidentifier { uint unused; };
+struct gfxnodeidentifier : nodeidentifier {};
+struct compnodeidentifier : nodeidentifier {};
+struct copynodeidentifier : nodeidentifier {};
+
 #define node [noinline] nodeidentifier
+#define graphics_node [noinline] gfxnodeidentifier
+#define compute_node [noinline] compnodeidentifier
+#define copy_node [noinline] copynodeidentifier
+
+struct rpsexportidentifier { uint unused; };
+#define rps_export [noinline] rpsexportidentifier
 
 #define __RPS_DECL_HANDLE(X) struct X { uint _value; };
 __RPS_DECL_HANDLE(resource);

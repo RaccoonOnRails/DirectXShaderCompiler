@@ -35,7 +35,27 @@ struct DxilToRps : public ModulePass {
 
   Function *m_RpsNodeCallFunc = nullptr;
   Function *m_RpsNodeParamPushFunc = nullptr;
-  std::vector<StringRef> m_RpsNodeNames = {};
+
+  enum RpsCommandTypeFlagBits {
+    RPS_COMMAND_TYPE_NO_FLAGS                   = 0,            ///< No flags.
+    RPS_COMMAND_TYPE_GRAPHICS_BIT               = (1 << 1),     ///< The command is graphics only.
+    RPS_COMMAND_TYPE_COMPUTE_BIT                = (1 << 2),     ///< The command is compute only.
+    RPS_COMMAND_TYPE_COPY_BIT                   = (1 << 3),     ///< The command is copy only.
+    RPS_COMMAND_TYPE_RESOLVE_BIT                = (1 << 4),     ///< The command is resolve only.
+    RPS_COMMAND_TYPE_CALLBACK_BIT               = (1 << 5),     ///< The command is a callback, no setup.
+    RPS_COMMAND_TYPE_CMD_BUF_BIT                = (1 << 6),     ///< The command submits prebuilt cmd bufs.
+    RPS_COMMAND_TYPE_PREFER_ASYNC_BIT           = (1 << 7),     ///< The command type prefers to run on an async queue.
+    RPS_COMMAND_TYPE_CUSTOM_VIEWPORT_BIT        = (1 << 8),     ///< The callback will set a custom viewport & scissor.
+    RPS_COMMAND_TYPE_EXTERNAL_WRITE_BIT         = (1 << 9),     ///< Command does some external write, such as updating debug CPU data.
+  };
+
+  struct RpsNodeDefInfo {
+    StringRef name;
+    uint32_t flags;
+  };
+
+  std::vector<RpsNodeDefInfo> m_RpsNodeInfos = {};
+  std::vector<Function *> m_RpsExportEntries = {};
   StringMap<int32_t> m_RpsNodeNameIndice = {};
   StringMap<Function *> m_RpsLibFuncs = {};
   GlobalVariable *m_ModuleIdGlobal = nullptr;
@@ -121,14 +141,39 @@ struct DxilToRps : public ModulePass {
     return NodeParamTypeCategory::RawBytes;
   }
 
-  bool runOnFunction(Module& M, Function &F) {
+  bool runOnFunction(Module &M, Function &F) {
+
+#if 0
+    auto attrs = F.getAttributes();
+    printf("Attrs: %s", attrs.getAsString(AttributeSet::FunctionIndex).c_str());
+#endif
+
+    bool bIsExportEntry = false;
+
+    // Check for rpsexport entry functions
+    if (F.getReturnType()->isVoidTy() && (F.arg_size() > 1) &&
+        F.hasStructRetAttr()) {
+      auto firstArg = F.arg_begin();
+      if (firstArg->getType()->isPointerTy()) {
+        auto pPtrType = dyn_cast<PointerType>(firstArg->getType());
+        if (pPtrType->getElementType()->isStructTy() &&
+            (pPtrType->getElementType()->getStructName() ==
+             "struct.rpsexportidentifier")) {
+          bIsExportEntry = true;
+        }
+      }
+    }
+
+    // Demangle rpsexport function
+    if (bIsExportEntry) {
+      F.setName(DemangleNames(F.getName()));
+      m_RpsExportEntries.push_back(&F);
+    }
 
     llvm::SmallVector<CallInst *, 32> callInsts;
 
-    if (!F.empty() && (F.getLinkage() == GlobalValue::ExternalLinkage)) {
-      F.setName(DemangleNames(F.getName()));
-    }
-
+    // Go through the function,
+    // replace raw node function calls with __rps_param_push / __rps_node_call
     for (auto bbIter = F.begin(); bbIter != F.end(); ++bbIter) {
       for (auto inst = bbIter->begin(); inst != bbIter->end(); ++inst) {
 
@@ -229,19 +274,39 @@ struct DxilToRps : public ModulePass {
       auto arg = argList.begin();
       auto argType = arg->getType();
 
+      static const struct {
+        const char *name;
+        unsigned flags;
+      } nodeIdentifiers[] = {
+        { "struct.nodeidentifier", RPS_COMMAND_TYPE_NO_FLAGS },
+        { "struct.gfxnodeidentifier", RPS_COMMAND_TYPE_GRAPHICS_BIT },
+        { "struct.compnodeidentifier", RPS_COMMAND_TYPE_COMPUTE_BIT },
+        { "struct.copynodeidentifier", RPS_COMMAND_TYPE_COPY_BIT },
+      };
+
       if (argType->isPointerTy()) {
         auto argPtrType = dyn_cast<PointerType>(argType);
         auto elemType = dyn_cast<StructType>(argPtrType->getElementType());
         if (elemType) {
           auto name = elemType->getName();
-          if (name == "struct.nodeidentifier") {
+
+          unsigned iNodedef = 0;
+          for (; iNodedef < _countof(nodeIdentifiers); iNodedef++) {
+            if (name == nodeIdentifiers[iNodedef].name) {
+              break;
+            }
+          }
+
+          if (iNodedef < _countof(nodeIdentifiers)) {
             auto funcName = F->getName();
             auto funcIndexIter = m_RpsNodeNameIndice.find(funcName);
             if (funcIndexIter == m_RpsNodeNameIndice.end()) {
-              funcIndex = static_cast<int32_t>(m_RpsNodeNames.size());
+              funcIndex = static_cast<int32_t>(m_RpsNodeInfos.size());
               m_RpsNodeNameIndice.insert(
-                  std::make_pair(funcName, m_RpsNodeNames.size()));
-              m_RpsNodeNames.push_back(funcName);
+                  std::make_pair(funcName, m_RpsNodeInfos.size()));
+              m_RpsNodeInfos.emplace_back();
+              m_RpsNodeInfos.back().name = funcName;
+              m_RpsNodeInfos.back().flags = nodeIdentifiers[iNodedef].flags;
             } else {
               funcIndex = funcIndexIter->second;
             }
@@ -264,24 +329,33 @@ struct DxilToRps : public ModulePass {
   }
 
   void WriteNodeTable(Module &M) {
-    std::vector<Constant *> stringConstants(m_RpsNodeNames.size() + 1);
+    std::vector<Constant *> nodeDefConstants((m_RpsNodeInfos.size() << 1) + 1);
 
-    auto stringType = llvm::Type::getInt8PtrTy(M.getContext());
+    auto bytePtrType = llvm::Type::getInt8PtrTy(M.getContext());
+    auto nodeDefArrayType = ArrayType::get(bytePtrType, nodeDefConstants.size());
 
-    for (uint32_t i = 0; i < m_RpsNodeNames.size(); i++) {
-      auto demangledName = DemangleNames(m_RpsNodeNames[i]);
+    auto intType = llvm::Type::getInt32Ty(M.getContext());
+
+    for (uint32_t i = 0; i < m_RpsNodeInfos.size(); i++) {
+      uint32_t idx = i << 1;
+
+      auto demangledName = DemangleNames(m_RpsNodeInfos[i].name);
       auto stringValue = CreateGlobalStringPtr(M, demangledName);
-      stringConstants[i] = stringValue;
+
+      auto nodeFlagConstant =
+          llvm::ConstantInt::get(intType, uint64_t(m_RpsNodeInfos[i].flags));
+
+      nodeDefConstants[idx] = stringValue;
+      nodeDefConstants[idx + 1] =
+          ConstantExpr::getIntToPtr(nodeFlagConstant, bytePtrType);
     }
-    stringConstants.back() = ConstantPointerNull::get(stringType);
+    nodeDefConstants.back() = ConstantPointerNull::get(bytePtrType);
 
-    auto stringArrayType = ArrayType::get(stringType, m_RpsNodeNames.size() + 1);
-
-    auto arrayValue = ConstantArray::get(stringArrayType, stringConstants);
+    auto arrayValue = ConstantArray::get(nodeDefArrayType, nodeDefConstants);
 
     auto nodedefNameArrayVar = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(
         AddModuleNamePostfix("__rps_nodedefs", M),
-        stringArrayType));
+        nodeDefArrayType));
     nodedefNameArrayVar->setLinkage(GlobalVariable::ExternalLinkage);
     nodedefNameArrayVar->setAlignment(4);
     nodedefNameArrayVar->setInitializer(arrayValue);
@@ -295,26 +369,18 @@ struct DxilToRps : public ModulePass {
   }
 
   void WriteExportEntries(Module &M) {
-
-    std::vector<Function *> exportFuncs = {};
-
-    for (auto &F : M) {
-      if (!F.empty() && (F.getLinkage() == GlobalValue::ExternalLinkage)) {
-        exportFuncs.push_back(&F);
-      }
-    }
-
-    std::vector<Constant *> funcConstants((exportFuncs.size() << 1) + 1);
+    std::vector<Constant *> funcConstants((m_RpsExportEntries.size() << 1) + 1);
 
     auto funcPtrType = llvm::Type::getInt8PtrTy(M.getContext());
     auto funcPtrArrayType = ArrayType::get(funcPtrType, funcConstants.size());
 
-    for (uint32_t i = 0; i < exportFuncs.size(); i++) {
+    for (uint32_t i = 0; i < m_RpsExportEntries.size(); i++) {
       uint32_t idx = i << 1;
 
-      funcConstants[idx] = ConstantExpr::getBitCast(exportFuncs[i], funcPtrType);
-      funcConstants[idx + 1] =
-          CreateGlobalStringPtr(M, DemangleNames(exportFuncs[i]->getName()));
+      funcConstants[idx] =
+          ConstantExpr::getBitCast(m_RpsExportEntries[i], funcPtrType);
+      funcConstants[idx + 1] = CreateGlobalStringPtr(
+          M, DemangleNames(m_RpsExportEntries[i]->getName()));
     }
     funcConstants.back() = ConstantPointerNull::get(funcPtrType);
 
