@@ -18,6 +18,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
@@ -55,10 +56,11 @@ struct DxilToRps : public ModulePass {
   };
 
   std::vector<RpsNodeDefInfo> m_RpsNodeInfos = {};
-  std::vector<Function *> m_RpsExportEntries = {};
+  std::vector<std::pair<Function *, Function *> > m_RpsExportEntries = {};
   StringMap<int32_t> m_RpsNodeNameIndice = {};
   StringMap<Function *> m_RpsLibFuncs = {};
   GlobalVariable *m_ModuleIdGlobal = nullptr;
+  llvm::FunctionType *m_RpsExportWrapperFuncType;
 
   enum class NodeParamTypeCategory {
     Resource,
@@ -96,6 +98,12 @@ struct DxilToRps : public ModulePass {
     m_RpsLibFuncs.insert(std::make_pair("create_resource", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("create_view", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("clear_view", nullptr));
+
+    SmallVector<Type *, 1> exportWrapperParamType;
+    exportWrapperParamType.push_back(
+        Type::getInt8PtrTy(M.getContext())->getPointerTo());
+    m_RpsExportWrapperFuncType = FunctionType::get(
+        llvm::Type::getVoidTy(M.getContext()), exportWrapperParamType, false);
 
     for (auto &F : M) {
       printf("\nFunction %s", F.getName().data());
@@ -141,6 +149,58 @@ struct DxilToRps : public ModulePass {
     return NodeParamTypeCategory::RawBytes;
   }
 
+  Function* EmitRpsExportWrapperFunction(Module &M, Function &F) {
+    Function *WrapperFn = Function::Create(
+        m_RpsExportWrapperFuncType,
+        llvm::GlobalValue::LinkageTypes::ExternalLinkage, "", &M);
+
+    // Already demangled
+    WrapperFn->setName(F.getName() + "_wrapper");
+
+    WrapperFn->addFnAttr(Attribute::NoInline);
+    WrapperFn->addFnAttr(Attribute::NoUnwind);
+
+    BasicBlock *WrapperFnBody =
+        BasicBlock::Create(M.getContext(), "body", WrapperFn);
+
+    SmallVector<llvm::Type *, 16> dstArgTypes;
+    SmallVector<llvm::Value *, 16> dstArgValues;
+
+    for (auto &dstArg : F.getArgumentList()) {
+      dstArgTypes.push_back(dstArg.getType());
+    }
+
+    IRBuilder<> Builder(WrapperFnBody);
+
+    // Input argument (pointer array)
+    llvm::Value *srcArg = WrapperFn->getArgumentList().begin();
+
+    // Create temp local for sreturn
+    llvm::Type *sretType = cast<PointerType>(dstArgTypes[0])->getElementType();
+    llvm::Value *sretValue = Builder.CreateAlloca(sretType);
+
+    dstArgValues.resize(dstArgTypes.size(), nullptr);
+    dstArgValues[0] = sretValue;
+
+    // Deference args from pointer array
+    for (unsigned i = 1; i < dstArgTypes.size(); i++) {
+      auto indexConst = ConstantInt::get(M.getContext(), APInt(32, i - 1));
+      auto argPtrValue = Builder.CreateGEP(srcArg, indexConst);
+      auto argTypedPtrValue =
+          Builder.CreateBitCast(argPtrValue, dstArgTypes[i]->getPointerTo());
+
+      dstArgValues[i] = Builder.CreateLoad(argTypedPtrValue);
+    }
+
+    // Call actual function
+    Builder.CreateCall(&F, dstArgValues);
+
+    assert(Type::getVoidTy(M.getContext()) == WrapperFn->getReturnType());
+    Builder.CreateRetVoid();
+
+    return WrapperFn;
+  }
+
   bool runOnFunction(Module &M, Function &F) {
 
 #if 0
@@ -167,7 +227,8 @@ struct DxilToRps : public ModulePass {
     // Demangle rpsexport function
     if (bIsExportEntry) {
       F.setName(DemangleNames(F.getName()));
-      m_RpsExportEntries.push_back(&F);
+      auto wrapperFn = EmitRpsExportWrapperFunction(M, F);
+      m_RpsExportEntries.push_back(std::make_pair(&F, wrapperFn));
     }
 
     llvm::SmallVector<CallInst *, 32> callInsts;
@@ -369,21 +430,25 @@ struct DxilToRps : public ModulePass {
   }
 
   void WriteExportEntries(Module &M) {
-    std::vector<Constant *> funcConstants((m_RpsExportEntries.size() << 1) + 1);
+    std::vector<Constant *> funcConstants((m_RpsExportEntries.size() * 3) + 1);
 
     auto funcPtrType = llvm::Type::getInt8PtrTy(M.getContext());
     auto funcPtrArrayType = ArrayType::get(funcPtrType, funcConstants.size());
 
     for (uint32_t i = 0; i < m_RpsExportEntries.size(); i++) {
-      uint32_t idx = i << 1;
+      uint32_t idx = i * 3;
 
       funcConstants[idx] =
-          ConstantExpr::getBitCast(m_RpsExportEntries[i], funcPtrType);
-      funcConstants[idx + 1] = CreateGlobalStringPtr(
-          M, DemangleNames(m_RpsExportEntries[i]->getName()));
-    }
-    funcConstants.back() = ConstantPointerNull::get(funcPtrType);
+          ConstantExpr::getBitCast(m_RpsExportEntries[i].first, funcPtrType);
 
+      funcConstants[idx + 1] =
+          ConstantExpr::getBitCast(m_RpsExportEntries[i].second, funcPtrType);
+
+      funcConstants[idx + 2] = CreateGlobalStringPtr(
+          M, DemangleNames(m_RpsExportEntries[i].first->getName()));
+    }
+
+    funcConstants.back() = ConstantPointerNull::get(funcPtrType);
     auto arrayValue = ConstantArray::get(funcPtrArrayType, funcConstants);
 
     auto exportEntryArrayVar = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(
