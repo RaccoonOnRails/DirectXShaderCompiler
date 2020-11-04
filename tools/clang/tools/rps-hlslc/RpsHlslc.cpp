@@ -99,8 +99,8 @@ struct copynodeidentifier : nodeidentifier {};
 #define compute_node [noinline] compnodeidentifier
 #define copy_node [noinline] copynodeidentifier
 
-struct rpsexportidentifier { uint unused; };
-#define rps_export [noinline] rpsexportidentifier
+// typedef void rpsexportidentifier { uint unused; };
+#define rps_export [noinline] // rpsexportidentifier // TODO: dummy return rpsexportidentifier breaks control flow atm.
 
 #define __RPS_DECL_HANDLE(X) struct X { uint _value; };
 __RPS_DECL_HANDLE(resource);

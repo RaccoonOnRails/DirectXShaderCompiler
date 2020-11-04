@@ -26,6 +26,7 @@
 
 using namespace llvm;
 
+#define RPS_DEBUG_VERBOSE 0
 #define DEBUG_TYPE "rps"
 
 namespace {
@@ -56,7 +57,7 @@ struct DxilToRps : public ModulePass {
   };
 
   std::vector<RpsNodeDefInfo> m_RpsNodeInfos = {};
-  std::vector<std::pair<Function *, Function *> > m_RpsExportEntries = {};
+  std::vector<Function *> m_RpsExportEntries = {};
   StringMap<int32_t> m_RpsNodeNameIndice = {};
   StringMap<Function *> m_RpsLibFuncs = {};
   GlobalVariable *m_ModuleIdGlobal = nullptr;
@@ -107,7 +108,9 @@ struct DxilToRps : public ModulePass {
         llvm::Type::getVoidTy(M.getContext()), exportWrapperParamType, false);
 
     for (auto &F : M) {
+#if RPS_DEBUG_VERBOSE
       printf("\nFunction %s", F.getName().data());
+#endif
       runOnFunction(M, F);
     }
 
@@ -176,16 +179,23 @@ struct DxilToRps : public ModulePass {
     // Input argument (pointer array)
     llvm::Value *srcArg = WrapperFn->getArgumentList().begin();
 
+    dstArgValues.resize(dstArgTypes.size(), nullptr);
+
+#if 0
     // Create temp local for sreturn
     llvm::Type *sretType = cast<PointerType>(dstArgTypes[0])->getElementType();
     llvm::Value *sretValue = Builder.CreateAlloca(sretType);
 
-    dstArgValues.resize(dstArgTypes.size(), nullptr);
     dstArgValues[0] = sretValue;
 
     // Deference args from pointer array
     for (unsigned i = 1; i < dstArgTypes.size(); i++) {
       auto indexConst = ConstantInt::get(M.getContext(), APInt(32, i - 1));
+#else
+    // Deference args from pointer array
+    for (unsigned i = 0; i < dstArgTypes.size(); i++) {
+      auto indexConst = ConstantInt::get(M.getContext(), APInt(32, i));
+#endif
       auto argPtrValue = Builder.CreateGEP(srcArg, indexConst);
       auto argTypedPtrValue =
           Builder.CreateBitCast(argPtrValue, dstArgTypes[i]->getPointerTo());
@@ -211,6 +221,7 @@ struct DxilToRps : public ModulePass {
 
     bool bIsExportEntry = false;
 
+#if 0 // TODO: dummy return rpsexportidentifier breaks control flow atm.
     // Check for rpsexport entry functions
     if (F.getReturnType()->isVoidTy() && (F.arg_size() > 1) &&
         F.hasStructRetAttr()) {
@@ -224,12 +235,16 @@ struct DxilToRps : public ModulePass {
         }
       }
     }
+#else
+    if (F.hasFnAttribute(llvm::Attribute::AttrKind::NoInline)) {
+      bIsExportEntry = true;
+    }
+#endif
 
     // Demangle rpsexport function
     if (bIsExportEntry) {
       F.setName(DemangleNames(F.getName()));
-      auto wrapperFn = EmitRpsExportWrapperFunction(M, F);
-      m_RpsExportEntries.push_back(std::make_pair(&F, wrapperFn));
+      m_RpsExportEntries.push_back(&F);
     }
 
     llvm::SmallVector<CallInst *, 32> callInsts;
@@ -438,16 +453,15 @@ struct DxilToRps : public ModulePass {
     auto funcPtrArrayType = ArrayType::get(funcPtrType, funcConstants.size());
 
     for (uint32_t i = 0; i < m_RpsExportEntries.size(); i++) {
+
+      auto expFn = m_RpsExportEntries[i];
+      auto wrapperFn = EmitRpsExportWrapperFunction(M, *expFn);
+
       uint32_t idx = i * 3;
 
-      funcConstants[idx] =
-          ConstantExpr::getBitCast(m_RpsExportEntries[i].first, funcPtrType);
-
-      funcConstants[idx + 1] =
-          ConstantExpr::getBitCast(m_RpsExportEntries[i].second, funcPtrType);
-
-      funcConstants[idx + 2] = CreateGlobalStringPtr(
-          M, DemangleNames(m_RpsExportEntries[i].first->getName()));
+      funcConstants[idx] = ConstantExpr::getBitCast(expFn, funcPtrType);
+      funcConstants[idx + 1] = ConstantExpr::getBitCast(wrapperFn, funcPtrType);
+      funcConstants[idx + 2] = CreateGlobalStringPtr(M, expFn->getName());
     }
 
     funcConstants.back() = ConstantPointerNull::get(funcPtrType);
