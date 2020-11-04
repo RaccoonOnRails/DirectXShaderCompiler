@@ -598,7 +598,9 @@ ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
     LPWSTR name;
     pPass->GetOptionName(&name);
 
-    printf("\n%S", name);
+#if 0
+    printf("\nFound optimization pass: %S", name);
+#endif
 
     if (0 == wcscmp(name, L"dxil-2-rps")) {
       bFoundRpsPass = true;
@@ -637,7 +639,10 @@ ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
             pOutContianer = pOutPart;
 
             if (pOutText) {
-              printf("\n%s", (char *)pOutText->GetBufferPointer());
+              char *outTextBuf = (char *)pOutText->GetBufferPointer();
+              if (outTextBuf) {
+                printf("\n%s", outTextBuf);
+              }
             }
           }
           return pOutPart;

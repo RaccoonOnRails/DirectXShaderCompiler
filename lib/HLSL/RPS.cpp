@@ -133,9 +133,10 @@ struct DxilToRps : public ModulePass {
         calleeF->setName(newFuncName);
         libFuncIter->second = calleeF;
       }
-
+#if RPS_DEBUG_VERBOSE
       printf("\n        Replaced: %s => %s", demangledName.str().c_str(),
              C->getCalledFunction()->getName().str().c_str());
+#endif
     }
   }
 
@@ -262,8 +263,9 @@ struct DxilToRps : public ModulePass {
         auto callSite = CallSite(callInst);
         auto calleeF = callInst->getCalledFunction();
         auto calleeName = calleeF->getName();
-
+#if RPS_DEBUG_VERBOSE
         printf("\n    Callee %s", calleeName.data());
+#endif
 
         auto nodeDefIdx = getNodeDefIndex(calleeF);
         if (nodeDefIdx >= 0) {
