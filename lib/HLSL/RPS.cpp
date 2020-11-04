@@ -92,6 +92,7 @@ struct DxilToRps : public ModulePass {
     m_ModuleIdGlobal->setInitializer(constIntZero);
     m_ModuleIdGlobal->setLinkage(GlobalValue::ExternalLinkage);
     m_ModuleIdGlobal->setConstant(false);
+    m_ModuleIdGlobal->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
 
     m_RpsLibFuncs.insert(std::make_pair("describe_resource", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("describe_view", nullptr));
@@ -421,6 +422,7 @@ struct DxilToRps : public ModulePass {
     nodedefNameArrayVar->setAlignment(4);
     nodedefNameArrayVar->setInitializer(arrayValue);
     nodedefNameArrayVar->setConstant(true);
+    nodedefNameArrayVar->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
   }
 
   StringRef DemangleNames(const StringRef &name) {
@@ -459,6 +461,7 @@ struct DxilToRps : public ModulePass {
     exportEntryArrayVar->setAlignment(4);
     exportEntryArrayVar->setInitializer(arrayValue);
     exportEntryArrayVar->setConstant(true);
+    exportEntryArrayVar->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
   }
 };
 } // namespace
