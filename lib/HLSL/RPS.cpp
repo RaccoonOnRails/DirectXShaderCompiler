@@ -197,9 +197,18 @@ struct DxilToRps : public ModulePass {
     for (unsigned i = 0; i < dstArgTypes.size(); i++) {
       auto indexConst = ConstantInt::get(M.getContext(), APInt(32, i));
 #endif
-      auto argPtrValue = Builder.CreateGEP(srcArg, indexConst);
-      auto argTypedPtrValue =
-          Builder.CreateBitCast(argPtrValue, dstArgTypes[i]->getPointerTo());
+      auto argElementPtr = Builder.CreateGEP(srcArg, indexConst);
+
+      Value *argTypedPtrValue = nullptr;
+
+      if (dstArgTypes[i]->isPointerTy()) {
+        argTypedPtrValue = Builder.CreateBitCast(argElementPtr, dstArgTypes[i]->getPointerTo());
+      } else {
+        auto argTypedPtrPtrValue = Builder.CreateBitCast(
+            argElementPtr, dstArgTypes[i]->getPointerTo()->getPointerTo());
+        argTypedPtrValue = Builder.CreateLoad(dstArgTypes[i]->getPointerTo(),
+                                              argTypedPtrPtrValue);
+      }
 
       dstArgValues[i] = Builder.CreateLoad(argTypedPtrValue);
     }
