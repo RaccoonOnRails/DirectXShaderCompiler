@@ -22,7 +22,6 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
-#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
@@ -77,7 +76,8 @@ struct DxilToRps : public ModulePass {
     auto voidType = Type::getVoidTy(M.getContext());
     auto intType = Type::getInt32Ty(M.getContext());
     auto nodeCallFunc =
-        M.getOrInsertFunction("__rps_node_call", voidType, intType, intType, nullptr); // ModuleId, NodeId
+        M.getOrInsertFunction("__rps_node_call", voidType, intType, intType,
+                              intType, nullptr); // ModuleId, NodeId, NodeFlags
     m_RpsNodeCallFunc = dyn_cast<Function>(nodeCallFunc);
     m_RpsNodeCallFunc->setLinkage(GlobalValue::ExternalLinkage);
 
@@ -213,7 +213,68 @@ struct DxilToRps : public ModulePass {
     return WrapperFn;
   }
 
+  // Temporary solution for hacking "async" in.
+  template<unsigned N>
+  bool FindRawBufferStoreRecursive(llvm::User *user,
+                                   llvm::SmallPtrSet<llvm::User *, N> &toRemove) {
+    bool bFound = false;
+    auto name = user->getName();
+
+    auto asCallInst = dyn_cast<CallInst>(user);
+    if (asCallInst) {
+      auto userFunc = asCallInst->getCalledFunction();
+      if (userFunc->getName().startswith("dx.op.rawBufferStore")) {
+        auto secondArg = asCallInst->getArgOperand(1);
+
+        assert(secondArg && secondArg->getType()->isStructTy() &&
+               (secondArg->getType()->getStructName() == "dx.types.Handle"));
+
+        toRemove.insert(user);
+
+        auto handleArgInst = dyn_cast<CallInst>(secondArg);
+        if (handleArgInst) {
+          toRemove.insert(handleArgInst);
+
+          auto resourceStructArg = handleArgInst->getOperand(1);
+          auto resourceStructArgLoadInst = dyn_cast<Instruction>(resourceStructArg);
+          if (resourceStructArgLoadInst) {
+            toRemove.insert(resourceStructArgLoadInst);
+          }
+        }
+        return true;
+      }
+    }
+
+    for (auto nextUser : user->users()) {
+
+      if (FindRawBufferStoreRecursive(nextUser, toRemove)) {
+
+        toRemove.insert(user);
+
+        bFound = true;
+        break;
+      }
+    }
+
+    return bFound;
+  }
+
+  template <unsigned N>
+  bool IsAsyncMarker(llvm::Value *argValue,
+                     llvm::SmallPtrSet<llvm::User *, N> &toRemove) {
+    bool bFound = false;
+    for (auto user : argValue->users()) {
+      if (FindRawBufferStoreRecursive(user, toRemove)) {
+        bFound = true;
+        break;
+      }
+    }
+    return bFound;
+  }
+
   bool runOnFunction(Module &M, Function &F) {
+
+    SmallPtrSet<llvm::User *, 32> toRemove;
 
 #if 0
     auto attrs = F.getAttributes();
@@ -267,12 +328,34 @@ struct DxilToRps : public ModulePass {
         printf("\n    Callee %s", calleeName.data());
 #endif
 
+        bool isAsyncNode = false;
+
+        // Check if it's a node call
         auto nodeDefIdx = getNodeDefIndex(calleeF);
+
         if (nodeDefIdx >= 0) {
           auto nodeDefIdxVal = ConstantInt::get(
               Type::getInt32Ty(F.getContext()), nodeDefIdx, false);
 
           auto argIter = callSite.arg_begin();
+
+          // Check async compute hint
+          auto &nodeDefInfo = m_RpsNodeInfos[nodeDefIdx];
+
+          // TODO: Handle copy separately
+          if ((nodeDefInfo.flags & RPS_COMMAND_TYPE_COMPUTE_BIT) ||
+              (nodeDefInfo.flags & RPS_COMMAND_TYPE_COPY_BIT)) {
+
+            auto argValue = argIter->get();
+            isAsyncNode = IsAsyncMarker(argValue, toRemove);
+          }
+
+          static const unsigned RPS_COMMAND_ASYNC_COMPUTE = 1 << 1;
+
+          auto nodeFlagsVal = ConstantInt::get(
+              Type::getInt32Ty(F.getContext()),
+              (isAsyncNode ? RPS_COMMAND_ASYNC_COMPUTE : 0), false);
+
           argIter++;
 
           auto dstType = Type::getInt8PtrTy(F.getContext());
@@ -328,7 +411,7 @@ struct DxilToRps : public ModulePass {
           }
 
           auto loadModuleId = new LoadInst(m_ModuleIdGlobal, "", callInst);
-          CallInst::Create(m_RpsNodeCallFunc, { loadModuleId, nodeDefIdxVal }, "",
+          CallInst::Create(m_RpsNodeCallFunc, { loadModuleId, nodeDefIdxVal, nodeFlagsVal }, "",
                            callInst);
 
           callInsts.push_back(callInst);
@@ -343,7 +426,26 @@ struct DxilToRps : public ModulePass {
       inst->eraseFromParent();
     }
 
+    while (!toRemove.empty()) {
+      auto junk = *toRemove.begin();
+      RemoveUserRecursive(junk, toRemove);
+    }
+
     return true;
+  }
+
+  void RemoveUserRecursive(User *U, SmallPtrSet<llvm::User *, 32>& toRemove) {
+
+    for (auto UU : U->users()) {
+      RemoveUserRecursive(UU, toRemove);
+    }
+    auto pInst = dyn_cast<Instruction>(U);
+    if (pInst) {
+      pInst->eraseFromParent();
+    } else {
+      assert(false);
+    }
+    toRemove.erase(U);
   }
 
   int32_t getNodeDefIndex(Function *F) {

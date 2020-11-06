@@ -99,6 +99,9 @@ struct copynodeidentifier : nodeidentifier {};
 #define compute_node [noinline] compnodeidentifier
 #define copy_node [noinline] copynodeidentifier
 
+RWStructuredBuffer<compnodeidentifier> __rps_asyncmarker; // Hacky way to support async 
+#define async __rps_asyncmarker[0] =
+
 // typedef void rpsexportidentifier { uint unused; };
 #define rps_export [noinline] // rpsexportidentifier // TODO: dummy return rpsexportidentifier breaks control flow atm.
 
