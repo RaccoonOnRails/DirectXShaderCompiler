@@ -1,5 +1,3 @@
-set(HLSL_IGNORE_SOURCES host.c)
-
 set( LLVM_LINK_COMPONENTS
   ${LLVM_TARGETS_TO_BUILD}
 #  dxcsupport
@@ -9,6 +7,8 @@ set( LLVM_LINK_COMPONENTS
 #  Option     # option library
    Support    # just for assert and raw streams
   )
+
+set(HLSL_IGNORE_SOURCES RpsHlslcDummyDXIL.cpp)
 
 add_clang_executable(rps-hlslc
   RpsHlslc.cpp
@@ -44,4 +44,18 @@ add_dependencies(rps-hlslc dxcompiler)
 #endif()
 
 install(TARGETS rps-hlslc
+  RUNTIME DESTINATION bin)
+
+# Hack - Dummy dxil.dll to prevent loading any real ones.
+set(HLSL_IGNORE_SOURCES RpsHlslc.cpp)
+add_clang_library(dummy-dxil SHARED
+  RpsHlslcDummyDXIL.cpp
+)
+
+set_target_properties(dummy-dxil PROPERTIES
+    OUTPUT_NAME dxil)
+
+add_dependencies(rps-hlslc dummy-dxil)
+
+install(TARGETS dummy-dxil
   RUNTIME DESTINATION bin)
