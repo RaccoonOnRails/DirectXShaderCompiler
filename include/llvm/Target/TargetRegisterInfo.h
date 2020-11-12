@@ -1,3 +1,5 @@
+// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 //=== Target/TargetRegisterInfo.h - Target Register Information -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure

@@ -1,3 +1,5 @@
+# Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 add_llvm_library(LLVMCodeGen
   AggressiveAntiDepBreaker.cpp
   AllocationOrder.cpp

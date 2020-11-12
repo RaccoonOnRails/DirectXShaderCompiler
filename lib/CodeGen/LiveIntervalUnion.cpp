@@ -1,3 +1,5 @@
+// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 //===-- LiveIntervalUnion.cpp - Live interval union data structure --------===//
 //
 //                     The LLVM Compiler Infrastructure

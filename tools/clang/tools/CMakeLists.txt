@@ -1,3 +1,5 @@
+# Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 add_subdirectory(driver)
 # add_subdirectory(clang-format)    # HLSL Change
 # add_subdirectory(clang-format-vs) # HLSL Change

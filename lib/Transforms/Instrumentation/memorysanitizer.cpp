@@ -1,3 +1,5 @@
+// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 //===-- MemorySanitizer.cpp - detector of uninitialized reads -------------===//
 //
 //                     The LLVM Compiler Infrastructure

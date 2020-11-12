@@ -1,3 +1,5 @@
+// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 //===-- llvm/CodeGen/MachineBasicBlock.h ------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure

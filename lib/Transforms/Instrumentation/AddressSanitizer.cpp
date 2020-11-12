@@ -1,3 +1,5 @@
+// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 //===-- AddressSanitizer.cpp - memory error detector ------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure

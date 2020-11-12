@@ -1,3 +1,5 @@
+// Copyright (c) 2020 Advanced Micro Devices, Inc. All rights reserved.
+
 #define NOMINMAX
 #include <Windows.h>
 #include <Shlobj.h>

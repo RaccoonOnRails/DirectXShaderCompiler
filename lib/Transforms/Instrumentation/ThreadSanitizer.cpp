@@ -1,3 +1,5 @@
+// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 //===-- ThreadSanitizer.cpp - race detector -------------------------------===//
 //
 //                     The LLVM Compiler Infrastructure

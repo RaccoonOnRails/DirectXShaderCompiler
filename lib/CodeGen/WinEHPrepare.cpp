@@ -1,3 +1,5 @@
+// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 //===-- WinEHPrepare - Prepare exception handling for code generation ---===//
 //
 //                     The LLVM Compiler Infrastructure

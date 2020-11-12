@@ -1,3 +1,5 @@
+# Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 add_subdirectory(Utils)
 add_subdirectory(Instrumentation) # HLSL Change # RPS Change
 add_subdirectory(InstCombine)

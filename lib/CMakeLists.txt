@@ -1,3 +1,5 @@
+# Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 # `Support' and `TableGen' libraries are added on the top-level CMakeLists.txt
 
 add_subdirectory(IR)
