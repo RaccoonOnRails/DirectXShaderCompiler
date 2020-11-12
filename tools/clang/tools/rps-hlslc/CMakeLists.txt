@@ -1,3 +1,5 @@
+# Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
+
 set( LLVM_LINK_COMPONENTS
   ${LLVM_TARGETS_TO_BUILD}
 #  dxcsupport
@@ -9,6 +11,8 @@ set( LLVM_LINK_COMPONENTS
   )
 
 set(HLSL_IGNORE_SOURCES RpsHlslcDummyDXIL.cpp)
+
+set(HLSL_VERSION_LOCATION ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_clang_executable(rps-hlslc
   RpsHlslc.cpp
