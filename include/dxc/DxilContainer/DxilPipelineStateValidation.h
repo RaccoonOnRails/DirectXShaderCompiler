@@ -97,6 +97,7 @@ enum class PSVShaderKind : uint8_t    // DXIL::ShaderKind
   Callable,
   Mesh,
   Amplification,
+  RenderPipeline, // RPS Change
   Invalid,
 };
 

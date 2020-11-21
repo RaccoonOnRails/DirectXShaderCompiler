@@ -166,6 +166,7 @@ namespace DXIL {
     Callable,
     Mesh,
     Amplification,
+    RenderPipeline, // RPS Change
     Invalid,
   };
 

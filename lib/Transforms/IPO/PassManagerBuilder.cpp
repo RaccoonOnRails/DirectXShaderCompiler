@@ -667,6 +667,12 @@ void PassManagerBuilder::populateModulePassManager(
     MPM.add(createDxilEmitMetadataPass());
   }
   // HLSL Change Ends.
+
+  // RPS Change Begins.
+  if (HLSLRps) {
+    MPM.add(createDxilToRpsPass());
+  }
+  // RPS Change Ends.
   addExtensionsToPM(EP_OptimizerLast, MPM);
 }
 

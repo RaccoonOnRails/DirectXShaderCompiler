@@ -41,10 +41,11 @@ public:
   bool IsHS() const     { return m_Kind == Kind::Hull; }
   bool IsDS() const     { return m_Kind == Kind::Domain; }
   bool IsCS() const     { return m_Kind == Kind::Compute; }
-  bool IsLib() const    { return m_Kind == Kind::Library; }
+  bool IsLib() const    { return m_Kind == Kind::Library || IsRPS(); } // RPS Change
   bool IsRay() const    { return m_Kind >= Kind::RayGeneration && m_Kind <= Kind::Callable; }
   bool IsMS() const     { return m_Kind == Kind::Mesh; }
   bool IsAS() const     { return m_Kind == Kind::Amplification; }
+  bool IsRPS() const    { return m_Kind == Kind::RenderPipeline; } // RPS Change
   bool IsValid() const;
   bool IsValidForDxil() const;
   bool IsValidForModule() const;
@@ -98,7 +99,7 @@ private:
               bool m_bUAVs, bool m_bTypedUavs, unsigned m_UAVRegsLim);
   /* <py::lines('VALRULE-TEXT')>hctdb_instrhelp.get_num_shader_models()</py>*/
   // VALRULE-TEXT:BEGIN
-  static const unsigned kNumShaderModels = 74;
+  static const unsigned kNumShaderModels = 75; // RPS Change
   // VALRULE-TEXT:END
   static const ShaderModel ms_ShaderModels[kNumShaderModels];
 

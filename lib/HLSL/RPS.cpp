@@ -10,6 +10,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/Path.h"
 
 using namespace llvm;
 
@@ -49,6 +50,7 @@ struct DxilToRps : public ModulePass {
   StringMap<Function *> m_RpsLibFuncs = {};
   GlobalVariable *m_ModuleIdGlobal = nullptr;
   llvm::FunctionType *m_RpsExportWrapperFuncType;
+  std::string m_ModuleNameSimplified;
 
   enum class NodeParamTypeCategory {
     Resource,
@@ -56,11 +58,16 @@ struct DxilToRps : public ModulePass {
     RawBytes,
   };
 
-  static StringRef AddModuleNamePostfix(const char *prefix, Module &M) {
-    return (prefix + std::string(M.getName().empty() ? "" : "_") + M.getName()).str();
+  StringRef AddModuleNamePostfix(const char *prefix, Module &M) {
+    return (prefix + std::string(m_ModuleNameSimplified.empty() ? "" : "_") + m_ModuleNameSimplified);
   }
 
   bool runOnModule(Module &M) override {
+    m_ModuleNameSimplified = M.getName();
+    if (!m_ModuleNameSimplified.empty()) {
+      m_ModuleNameSimplified = llvm::sys::path::stem(m_ModuleNameSimplified);
+    }
+
     auto voidType = Type::getVoidTy(M.getContext());
     auto intType = Type::getInt32Ty(M.getContext());
     auto nodeCallFunc =
@@ -220,7 +227,10 @@ struct DxilToRps : public ModulePass {
     auto asCallInst = dyn_cast<CallInst>(user);
     if (asCallInst) {
       auto userFunc = asCallInst->getCalledFunction();
-      if (userFunc->getName().startswith("dx.op.rawBufferStore")) {
+      auto userFuncName = userFunc->getName();
+      
+      if (userFuncName.startswith("dx.op.rawBufferStore") ||
+          userFuncName.startswith("dx.op.bufferStore.i32")) {
         auto secondArg = asCallInst->getArgOperand(1);
 
         assert(secondArg && secondArg->getType()->isStructTy() &&

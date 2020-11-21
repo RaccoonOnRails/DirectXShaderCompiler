@@ -44,7 +44,7 @@ bool ShaderModel::operator==(const ShaderModel &other) const {
 
 bool ShaderModel::IsValid() const {
   DXASSERT(IsPS() || IsVS() || IsGS() || IsHS() || IsDS() || IsCS() ||
-               IsLib() || IsMS() || IsAS() || m_Kind == Kind::Invalid,
+               IsLib() || IsMS() || IsAS() || IsRPS() || m_Kind == Kind::Invalid, // RPS Change
            "invalid shader model");
   return m_Kind != Kind::Invalid;
 }
@@ -158,6 +158,7 @@ const ShaderModel *ShaderModel::Get(Kind Kind, unsigned Major, unsigned Minor) {
   {853510,70}, //ms_6_6
   {919045,71}, //as_6_5
   {919046,72}, //as_6_6
+  {984576,73}, //rps_6_0  // RPS Change
   };
   unsigned hash = (unsigned)Kind << 16 | Major << 8 | Minor;
   auto it = hashToIdxMap.find(hash);
@@ -168,7 +169,7 @@ const ShaderModel *ShaderModel::Get(Kind Kind, unsigned Major, unsigned Minor) {
 }
 
 const ShaderModel *ShaderModel::GetByName(const char *pszName) {
-  // [ps|vs|gs|hs|ds|cs|ms|as]_[major]_[minor]
+  // [ps|vs|gs|hs|ds|cs|ms|as|rps]_[major]_[minor]  // RPS Change
   Kind kind;
   switch (pszName[0]) {
   case 'p':   kind = Kind::Pixel;     break;
@@ -180,9 +181,17 @@ const ShaderModel *ShaderModel::GetByName(const char *pszName) {
   case 'l':   kind = Kind::Library;   break;
   case 'm':   kind = Kind::Mesh;      break;
   case 'a':   kind = Kind::Amplification; break;
+  case 'r':   kind = Kind::RenderPipeline; break;
   default:    return GetInvalid();
   }
   unsigned Idx = 3;
+  // RPS Change Begins
+  if (kind == Kind::RenderPipeline) {
+    if (pszName[1] != 'p' || pszName[2] != 's' || pszName[3] != '_')
+      return GetInvalid();
+    Idx = 4;
+  } else
+  // RPS Change Ends
   if (kind != Kind::Library) {
     if (pszName[1] != 's' || pszName[2] != '_')
       return GetInvalid();
@@ -331,7 +340,7 @@ void ShaderModel::GetMinValidatorVersion(unsigned &ValMajor, unsigned &ValMinor)
 static const char *ShaderModelKindNames[] = {
     "ps", "vs", "gs", "hs", "ds", "cs", "lib",
     "raygeneration", "intersection", "anyhit", "closesthit", "miss", "callable",
-    "ms", "as", "invalid",
+    "ms", "as", "rps", "invalid",  // RPS Change
 };
 
 const char * ShaderModel::GetKindName() const {
@@ -429,6 +438,7 @@ const ShaderModel ShaderModel::ms_ShaderModels[kNumShaderModels] = {
   SM(Kind::Mesh, 6, 6, "ms_6_6", 0, 0, true, true, UINT_MAX),
   SM(Kind::Amplification, 6, 5, "as_6_5", 0, 0, true, true, UINT_MAX),
   SM(Kind::Amplification, 6, 6, "as_6_6", 0, 0, true, true, UINT_MAX),
+  SM(Kind::RenderPipeline, 6, 0, "rps_6_0", 0, 0, true, true, UINT_MAX), // RPS Change
   // Values before Invalid must remain sorted by Kind, then Major, then Minor.
   SM(Kind::Invalid,  0, 0, "invalid", 0,  0,   false, false, 0),
   // VALRULE-TEXT:END

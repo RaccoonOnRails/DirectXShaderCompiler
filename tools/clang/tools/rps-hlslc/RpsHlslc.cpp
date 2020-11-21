@@ -15,6 +15,8 @@
 
 #define RPS_ENABLE_DEBUG_INFO 1
 
+#define RPS_AS_SECONDARY_OPT_PASS 0
+
 using namespace llvm;
 
 static cl::opt<std::string> InputFilename(cl::Positional,
@@ -527,15 +529,23 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   std::vector<LPCWSTR> arguments;
 
   arguments.push_back(L"-Vd");
+
   arguments.push_back(L"-default-linkage");
   arguments.push_back(L"external");
 
   arguments.push_back(L"-Zi");
   arguments.push_back(L"-res_may_alias");
+  arguments.push_back(L"-Qembed_debug");
 
   ComPtr<IDxcOperationResult> pResult;
   HRESULT hr = pCompiler->Compile(
-      pSource.Get(), fileNameW, L"", L"lib_6_3", arguments.data(),
+      pSource.Get(), fileNameW, L"",
+#if RPS_AS_SECONDARY_OPT_PASS
+      L"lib_6_3"
+#else
+      L"rps_6_0",
+#endif
+      arguments.data(),
       static_cast<UINT>(arguments.size()), nullptr, 0, nullptr, &pResult);
 
   if (pResult) {
@@ -587,6 +597,7 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   return pContainer;
 }
 
+#if RPS_AS_SECONDARY_OPT_PASS
 ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
   ComPtr<IDxcOptimizer> pOptimizer;
   ThrowIfFailed(
@@ -672,6 +683,7 @@ ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
 
   return pOutContianer;
 }
+#endif
 
 void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC, const char* tmpFileName) {
   ComPtr<IDxcCompiler> pCompiler;
@@ -721,11 +733,13 @@ int main(const int argc, const char *argv[]) {
 
   auto pCode = CompileHlslToDxilContainer(InputFilename.c_str());
 
-  auto pRpsBC = ConvertDxilToRps(pCode);
+#if RPS_AS_SECONDARY_OPT_PASS
+  pCode = ConvertDxilToRps(pCode);
+#endif
 
   auto tmpRpsLLFile = OutputDirectory + "/" + OutputFileStem + ".tmp.rps.ll";
 
-  DisassembleRps(pRpsBC, tmpRpsLLFile.c_str());
+  DisassembleRps(pCode, tmpRpsLLFile.c_str());
 
   int result = 0;
 

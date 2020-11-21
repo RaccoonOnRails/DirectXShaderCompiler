@@ -1676,6 +1676,20 @@ bool DxilModule::StripReflection() {
     GV->eraseFromParent();
   }
 
+  // RPS Change Begins.
+  if (GetShaderModel()->IsRPS()) {
+    for (uint32_t iUAV = 0; iUAV < m_UAVs.size(); iUAV++) {
+      if (m_UAVs[iUAV]->GetGlobalName() == "__rps_asyncmarker") {
+        if (iUAV != m_UAVs.size() - 1) {
+          swap(m_UAVs[iUAV], m_UAVs[m_UAVs.size() - 1]);
+          iUAV--;
+        }
+        m_UAVs.pop_back();
+      }
+    }
+  }
+  // RPS Change Ends.
+
   // ReEmit meta.
   if (bChanged)
     ReEmitDxilResources();
