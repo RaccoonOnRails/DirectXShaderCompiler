@@ -3808,6 +3808,26 @@ HLSLReservedKeyword:
       }
       break;
       // HLSL Change Ends
+      // RPS Change Begins
+    case tok::kw_indirectargs:
+    case tok::kw_constants:
+    case tok::kw_readonly:
+    case tok::kw_depthreadonly:
+    case tok::kw_stencilreadonly:
+    case tok::kw_rtas:
+    case tok::kw_relaxed:
+    case tok::kw_persistent:
+      if (getLangOpts().HLSL) {
+        if (DS.getTypeSpecType() != DeclSpec::TST_unspecified) {
+          PrevSpec = "";
+          DiagID = diag::err_hlsl_modifier_after_type;
+          isInvalid = true;
+        } else {
+          DS.getAttributes().addNew(Tok.getIdentifierInfo(), Tok.getLocation(), 0, SourceLocation(), 0, 0, AttributeList::AS_CXX11);
+        }
+      }
+      break;
+    // RPS Change Ends
     case tok::kw_auto:
       if (getLangOpts().HLSL) { goto HLSLReservedKeyword; } // HLSL Change - auto is reserved for HLSL
       if (getLangOpts().CPlusPlus11) {
@@ -5134,6 +5154,9 @@ bool Parser::isTypeSpecifierQualifier() {
   case tok::kw_snorm:
   case tok::kw_unorm:
     // HLSL Change Ends
+    // RPS Change Starts
+  case tok::kw_persistent:
+    // RPS Change Ends
     return true;
 
     // GNU ObjC bizarre protocol extension: <proto1,proto2> with implicit 'id'.
@@ -5252,6 +5275,11 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
   case tok::kw_payload:
     return true;
   // HLSL Change Ends
+
+  // RPS Change Starts
+  case tok::kw_persistent:
+    return true;
+  // RPS Change Ends
 
     // storage-class-specifier
   case tok::kw_typedef:

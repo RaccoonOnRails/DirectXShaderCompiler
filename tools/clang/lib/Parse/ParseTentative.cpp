@@ -958,6 +958,7 @@ Parser::isExpressionOrTypeSpecifierSimple(tok::TokenKind Kind) {
   case tok::kw_row_major:
   case tok::kw_snorm:
   case tok::kw_unorm:
+  case tok::kw_persistent: // RPS Change
   // HLSL Change Ends
   case tok::kw_restrict:
   case tok::kw_short:
@@ -1311,6 +1312,7 @@ Parser::isCXXDeclarationSpecifier(Parser::TPResult BracedCastResult,
   case tok::kw_triangle:
   case tok::kw_triangleadj:
   case tok::kw_export:
+  case tok::kw_persistent: // RPS Change
     return TPResult::True;
   // HLSL Change Ends
 

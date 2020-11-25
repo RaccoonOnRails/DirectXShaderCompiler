@@ -903,6 +903,46 @@ def HLSLWaveSensitive : InheritableAttr {
 
 // HLSL Change Ends
 
+// RPS Change Starts
+
+def RPSResourceAccessIndirectArgs : InheritableAttr {
+  let Spellings = [CXX11<"", "indirectargs", 2015>];
+  let Subjects = SubjectList<[ParmVar]>;
+  let Documentation = [Undocumented];
+}
+
+def RPSResourceAccessConstantBuffer : InheritableAttr {
+  let Spellings = [CXX11<"", "constants", 2015>];
+  let Subjects = SubjectList<[ParmVar]>;
+  let Documentation = [Undocumented];
+}
+
+def RPSResourceAccessReadonlyDepthStencil : InheritableAttr {
+  let Spellings = [CXX11<"", "readonly", 2015>];
+  let Subjects = SubjectList<[ParmVar]>;
+  let Documentation = [Undocumented];
+}
+
+def RPSResourceAccessRayTracingAS : InheritableAttr {
+  let Spellings = [CXX11<"", "rtas", 2015>];
+  let Subjects = SubjectList<[ParmVar]>;
+  let Documentation = [Undocumented];
+}
+
+def RPSRelaxedOrdering : InheritableAttr {
+  let Spellings = [CXX11<"", "relaxed", 2015>];
+  let Subjects = SubjectList<[ParmVar]>;
+  let Documentation = [Undocumented];
+}
+
+def RPSPersistentResource : InheritableAttr {
+  let Spellings = [CXX11<"", "persistent", 2015>];
+  let Subjects = SubjectList<[Var]>;
+  let Documentation = [Undocumented];
+}
+
+// RPS Change Ends
+
 // SPIRV Change Starts
 
 def VKBuiltIn : InheritableAttr {

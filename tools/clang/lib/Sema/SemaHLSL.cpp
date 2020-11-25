@@ -11183,6 +11183,16 @@ void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, 
     declAttr = ::new (S.Context) HLSLPayloadAttr(
         A.getRange(), S.Context, A.getAttributeSpellingListIndex());
     break;
+// RPS Change Begins
+  case AttributeList::AT_RPSRelaxedOrdering:
+    declAttr = ::new (S.Context) RPSRelaxedOrderingAttr(
+        A.getRange(), S.Context, A.getAttributeSpellingListIndex());
+    break;
+  case AttributeList::AT_RPSPersistentResource:
+    declAttr = ::new (S.Context) RPSPersistentResourceAttr(
+        A.getRange(), S.Context, A.getAttributeSpellingListIndex());
+    break;
+// RPS Change Ends
 
   default:
     Handled = false;
@@ -12669,6 +12679,34 @@ void hlsl::CustomPrintHLSLAttr(const clang::Attr *A, llvm::raw_ostream &Out, con
     Out << "payload ";
     break;
 
+  // Begin RPS Change
+
+  case clang::attr::RPSPersistentResource:
+    Out << "persistent ";
+    break;
+
+  case clang::attr::RPSRelaxedOrdering:
+    Out << "relaxed ";
+    break;
+
+  case clang::attr::RPSResourceAccessConstantBuffer:
+    Out << "constants ";
+    break;
+
+  case clang::attr::RPSResourceAccessIndirectArgs:
+    Out << "indirectargs ";
+    break;
+
+  case clang::attr::RPSResourceAccessRayTracingAS:
+    Out << "rtas ";
+    break;
+
+  case clang::attr::RPSResourceAccessReadonlyDepthStencil:
+    Out << "readonly ";
+    break;
+
+  // End RPS Change
+
   default:
     A->printPretty(Out, Policy);
     break;
@@ -12738,6 +12776,14 @@ bool hlsl::IsHLSLAttr(clang::attr::Kind AttrKind) {
   case clang::attr::VKOffset:
   case clang::attr::VKPushConstant:
   case clang::attr::VKShaderRecordNV:
+  // Begin RPS Change
+  case clang::attr::RPSPersistentResource:
+  case clang::attr::RPSRelaxedOrdering:
+  case clang::attr::RPSResourceAccessConstantBuffer:
+  case clang::attr::RPSResourceAccessIndirectArgs:
+  case clang::attr::RPSResourceAccessRayTracingAS:
+  case clang::attr::RPSResourceAccessReadonlyDepthStencil:
+  // End RPS Change
     return true;
   default:
     // Only HLSL/VK Attributes return true. Only used for printPretty(), which doesn't support them.

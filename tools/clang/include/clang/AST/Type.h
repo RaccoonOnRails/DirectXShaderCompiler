@@ -3653,6 +3653,10 @@ public:
     attr_hlsl_column_major,
     attr_hlsl_globallycoherent,
     // HLSL Change Ends    
+    // RPS Change Begins
+    attr_rps_persistent,
+    // RPS Change Ends
+
   };
 
 private:
