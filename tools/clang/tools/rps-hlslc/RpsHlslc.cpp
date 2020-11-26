@@ -310,6 +310,7 @@ struct ResourceDesc
   uint DepthOrArraySize;
   uint MipLevels;
   SampleDesc SampleDesc;
+  uint TemporalLayers;
 };
 
 struct ResourceViewDesc
@@ -323,6 +324,7 @@ struct ResourceViewDesc
   uint ArrayLayers;
   uint PlaneMask;
   access AccessFlags;
+  uint TemporalLayer;
 };
 
 ResourceDesc describe_resource( resource r );
@@ -331,7 +333,7 @@ resource create_resource( ResourceDesc desc );
 view create_view( ResourceViewDesc desc );
 void clear_view( view v, uint option, uint4 data );
 
-inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, format format, uint sampleCount = 1, uint sampleQuality = 0 )
+inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, format format, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0 )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resourcetype::tex2d;
@@ -342,26 +344,44 @@ inline resource create_tex2d( uint width, uint height, uint arraySlices, uint nu
     desc.MipLevels = numMips;
     desc.SampleDesc.Count = sampleCount;
     desc.SampleDesc.Quality = sampleQuality;
+    desc.TemporalLayers = numTemporalLayers;
 
     return create_resource(desc);
 }
 
-inline resource create_buffer( uint64_t width, format format = rps::format::unknown )
+inline resource create_tex3d( uint width, uint height, uint depth, uint numMips, format format, uint numTemporalLayers = 1 )
+{
+    ResourceDesc desc;
+    desc.Dimension = rps::resourcetype::tex2d;
+    desc.Format = format;
+    desc.Width = width;
+    desc.Height = height;
+    desc.DepthOrArraySize = depth;
+    desc.MipLevels = numMips;
+    desc.SampleDesc.Count = 1;
+    desc.SampleDesc.Quality = 0;
+    desc.TemporalLayers = numTemporalLayers;
+
+    return create_resource(desc);
+}
+
+inline resource create_buffer( uint64_t width, uint numTemporalLayers = 1 )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resourcetype::buffer;
-    desc.Format = format;
+    desc.Format = rps::format::unknown;
     desc.Width = width;
     desc.Height = 1;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
     desc.SampleDesc.Count = 1;
     desc.SampleDesc.Quality = 0;
+    desc.TemporalLayers = numTemporalLayers;
 
     return create_resource(desc);
 }
 
-inline view create_srv( resource r, uint dimension, uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, format format = rps::format::unknown )
+inline view create_srv( resource r, uint dimension, uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, format format = rps::format::unknown, uint temporalLayer = 0 )
 {
     ResourceViewDesc desc;
     desc.Parent = r;
@@ -373,11 +393,12 @@ inline view create_srv( resource r, uint dimension, uint baseMip, uint mipLevels
     desc.ArrayLayers = numArraySlices;
     desc.PlaneMask = planeMask;
     desc.AccessFlags = access::or(rps::access::ps_resource, rps::access::non_ps_resource);
+    desc.TemporalLayer = temporalLayer;
 
     return create_view( desc );
 }
 
-inline view create_uav( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown )
+inline view create_uav( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown, uint temporalLayer = 0 )
 {
     ResourceViewDesc desc;
     desc.Parent = r;
@@ -389,11 +410,12 @@ inline view create_uav( resource r, uint dimension, uint baseMip, uint baseArray
     desc.ArrayLayers = numArraySlices;
     desc.PlaneMask = 0x1;
     desc.AccessFlags = rps::access::unordered_access;
+    desc.TemporalLayer = temporalLayer;
 
     return create_view( desc );
 }
 
-inline view create_rtv( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown )
+inline view create_rtv( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown, uint temporalLayer = 0 )
 {
     ResourceViewDesc desc;
     desc.Parent = r;
@@ -405,11 +427,12 @@ inline view create_rtv( resource r, uint dimension, uint baseMip, uint baseArray
     desc.ArrayLayers = numArraySlices;
     desc.PlaneMask = 0x1;
     desc.AccessFlags = rps::access::render_target;
+    desc.TemporalLayer = temporalLayer;
 
     return create_view( desc );
 }
 
-inline view create_dsv( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown, uint planeMask = 0x3, bool bReadonly = false )
+inline view create_dsv( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown, uint planeMask = 0x3, bool bReadonly = false, uint temporalLayer = 0 )
 {
     ResourceViewDesc desc;
     desc.Parent = r;
@@ -420,6 +443,7 @@ inline view create_dsv( resource r, uint dimension, uint baseMip, uint baseArray
     desc.BaseArraySlice = baseArraySlice;
     desc.ArrayLayers = numArraySlices;
     desc.PlaneMask = planeMask; // TODO: consider format
+    desc.TemporalLayer = temporalLayer;
 
     if (bReadonly)
         desc.AccessFlags = rps::access::depth_read;
@@ -532,6 +556,8 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
 
   arguments.push_back(L"-Zi");
   arguments.push_back(L"-res_may_alias");
+
+  arguments.push_back(L"-Qembed_debug");
 
   ComPtr<IDxcOperationResult> pResult;
   HRESULT hr = pCompiler->Compile(
