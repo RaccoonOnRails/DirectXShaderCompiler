@@ -117,11 +117,11 @@ __RPS_DECL_HANDLE(dsv);
 __RPS_DECL_HANDLE(srv);
 __RPS_DECL_HANDLE(uav);
 
-#define __RPS_BEGIN_DECL_ENUM(X) struct X { uint _value; static struct X or(struct X a, struct X b) { struct X x; x._value = a._value | b._value; return x; } }; namespace rps { namespace X { typedef struct X __RPS_ENUM_TYPE;
-#define __RPS_ENUM_VALUE(N, V) static const __RPS_ENUM_TYPE N = { V };
-#define __RPS_END_DECL_ENUM() } }
+#define __RPS_BEGIN_DECL_ENUM(X) namespace rps { enum class X {
+#define __RPS_ENUM_VALUE(N, V) N = (V),
+#define __RPS_END_DECL_ENUM() }; }
 
-__RPS_BEGIN_DECL_ENUM(resourcetype)
+__RPS_BEGIN_DECL_ENUM(resource_type)
     __RPS_ENUM_VALUE(buffer, 0)
     __RPS_ENUM_VALUE(tex1d, 1)
     __RPS_ENUM_VALUE(tex2d, 2)
@@ -245,100 +245,66 @@ __RPS_BEGIN_DECL_ENUM(access)
     __RPS_ENUM_VALUE(unknown         , 1 << 31)
 __RPS_END_DECL_ENUM()
 
-namespace rps
-{
-    static const uint uav_buffer = 0;
-    static const uint uav_tex1d = 1;
-    static const uint uav_tex1darray = 2;
-    static const uint uav_tex2d = 3;
-    static const uint uav_tex2darray = 4;
-    static const uint uav_tex3d = 5;
-
-    static const uint srv_buffer = 0x10;
-    static const uint srv_tex1d = 0x11;
-    static const uint srv_tex1darray = 0x12;
-    static const uint srv_tex2d = 0x13;
-    static const uint srv_tex2darray = 0x14;
-    static const uint srv_tex2dms = 0x15;
-    static const uint srv_tex2dmsarray = 0x16;
-    static const uint srv_tex3d = 0x17;
-    static const uint srv_texcube = 0x18;
-    static const uint srv_texcubearray = 0x19;
-    static const uint srv_rtas = 0x1a;
-
-    static const uint rtv_buffer = 0x40;
-    static const uint rtv_tex1d = 0x41;
-    static const uint rtv_tex1darray = 0x42;
-    static const uint rtv_tex2d = 0x43;
-    static const uint rtv_tex2darray = 0x44;
-    static const uint rtv_tex2dms = 0x45;
-    static const uint rtv_tex2dmsarray = 0x46;
-    static const uint rtv_tex3d = 0x47;
-
-    static const uint dsv_tex1d = 0x50;
-    static const uint dsv_tex1darray = 0x51;
-    static const uint dsv_tex2d = 0x52;
-    static const uint dsv_tex2darray = 0x53;
-    static const uint dsv_tex2dms = 0x54;
-    static const uint dsv_tex2dmsarray = 0x55;
-
-    static const uint dsv_readonly_depth = 0x8000;
-    static const uint dsv_readonly_stencil = 0x4000;
-
-    static const uint cbv = 0x70;
-
-    namespace clear
-    {
-        static const uint color = 0;
-        static const uint depth = 1;
-        static const uint stencil = 2;
-        static const uint uavfloat = 4;
-        static const uint uavuint = 8;
-    }
-}
+__RPS_BEGIN_DECL_ENUM(clear)
+    __RPS_ENUM_VALUE(color    , 1 << 0)
+    __RPS_ENUM_VALUE(depth    , 1 << 1)
+    __RPS_ENUM_VALUE(stencil  , 1 << 2)
+    __RPS_ENUM_VALUE(uavfloat , 1 << 3)
+    __RPS_ENUM_VALUE(uavuint  , 1 << 4)
+__RPS_END_DECL_ENUM()
 
 struct SampleDesc
 {
-  uint Count;
-  uint Quality;
+    uint Count;
+    uint Quality;
 };
 
 struct ResourceDesc
 {
-  resourcetype Dimension;
-  format Format;
-  uint64_t Width;
-  uint Height;
-  uint DepthOrArraySize;
-  uint MipLevels;
-  SampleDesc SampleDesc;
-  uint TemporalLayers;
+    rps::resource_type Dimension;
+    rps::format Format;
+    uint64_t Width;
+    uint Height;
+    uint DepthOrArraySize;
+    uint MipLevels;
+    SampleDesc SampleDesc;
+    uint TemporalLayers;
+};
+
+struct SubResourceRange
+{
+    uint BaseMip;
+    uint Mips;
+    uint BaseArraySlice;
+    uint ArrayLayers;
+    uint PlaneMask;
+    uint TemporalLayer;
+};
+
+struct BufferRange
+{
+    uint64_t Offset;
+    uint64_t SizeInBytes;
+    uint TemporalLayer;
 };
 
 struct ResourceViewDesc
 {
-  resource Parent;
-  uint Dimension;
-  format Format;
-  uint BaseMip;
-  uint Mips;
-  uint BaseArraySlice;
-  uint ArrayLayers;
-  uint PlaneMask;
-  access AccessFlags;
-  uint TemporalLayer;
+    rps::format Format;
+    SubResourceRange TextureView;
+    BufferRange BufferView;
 };
 
 ResourceDesc describe_resource( resource r );
 ResourceViewDesc describe_view( view v );
 resource create_resource( ResourceDesc desc );
-view create_view( ResourceViewDesc desc );
-void clear_view( view v, uint option, uint4 data );
+view create_view( resource r, ResourceViewDesc desc );
+void clear_view( view v, rps::clear option, uint4 data );
 
-inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, format format, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0 )
+inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, rps::format format, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0 )
 {
     ResourceDesc desc;
-    desc.Dimension = rps::resourcetype::tex2d;
+    desc.Dimension = rps::resource_type::tex2d;
     desc.Format = format;
     desc.Width = width;
     desc.Height = height;
@@ -351,10 +317,10 @@ inline resource create_tex2d( uint width, uint height, uint arraySlices, uint nu
     return create_resource(desc);
 }
 
-inline resource create_tex3d( uint width, uint height, uint depth, uint numMips, format format, uint numTemporalLayers = 1 )
+inline resource create_tex3d( uint width, uint height, uint depth, uint numMips, rps::format format, uint numTemporalLayers = 1 )
 {
     ResourceDesc desc;
-    desc.Dimension = rps::resourcetype::tex2d;
+    desc.Dimension = rps::resource_type::tex2d;
     desc.Format = format;
     desc.Width = width;
     desc.Height = height;
@@ -370,7 +336,7 @@ inline resource create_tex3d( uint width, uint height, uint depth, uint numMips,
 inline resource create_buffer( uint64_t width, uint numTemporalLayers = 1 )
 {
     ResourceDesc desc;
-    desc.Dimension = rps::resourcetype::buffer;
+    desc.Dimension = rps::resource_type::buffer;
     desc.Format = rps::format::unknown;
     desc.Width = width;
     desc.Height = 1;
@@ -383,79 +349,52 @@ inline resource create_buffer( uint64_t width, uint numTemporalLayers = 1 )
     return create_resource(desc);
 }
 
-inline view create_srv( resource r, uint dimension, uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, format format = rps::format::unknown, uint temporalLayer = 0 )
+inline SubResourceRange make_texture_range( uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0 )
 {
-    ResourceViewDesc desc;
-    desc.Parent = r;
-    desc.Dimension = dimension;
-    desc.Format = format;
-    desc.BaseMip = baseMip;
-    desc.Mips = mipLevels;
-    desc.BaseArraySlice = baseArraySlice;
-    desc.ArrayLayers = numArraySlices;
-    desc.PlaneMask = planeMask;
-    desc.AccessFlags = access::or(rps::access::ps_resource, rps::access::non_ps_resource);
-    desc.TemporalLayer = temporalLayer;
+    SubResourceRange range = (SubResourceRange)0;
 
-    return create_view( desc );
+    range.BaseMip        = baseMip;
+    range.Mips           = mipLevels;
+    range.BaseArraySlice = baseArraySlice;
+    range.ArrayLayers    = numArraySlices;
+    range.PlaneMask      = planeMask;
+    range.TemporalLayer  = temporalLayer;
+
+    return range;
 }
 
-inline view create_uav( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown, uint temporalLayer = 0 )
+inline BufferRange make_buffer_range( uint64_t offset, uint64_t sizeInBytes = 0, uint temporalLayer = 0 )
 {
-    ResourceViewDesc desc;
-    desc.Parent = r;
-    desc.Dimension = dimension;
-    desc.Format = format;
-    desc.BaseMip = baseMip;
-    desc.Mips = 1;
-    desc.BaseArraySlice = baseArraySlice;
-    desc.ArrayLayers = numArraySlices;
-    desc.PlaneMask = 0x1;
-    desc.AccessFlags = rps::access::unordered_access;
-    desc.TemporalLayer = temporalLayer;
+    BufferRange range = (BufferRange)0;
 
-    return create_view( desc );
+    range.Offset        = offset;
+    range.SizeInBytes   = sizeInBytes;
+    range.TemporalLayer = temporalLayer;
+
+    return range;
 }
 
-inline view create_rtv( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown, uint temporalLayer = 0 )
+inline view create_texture_view( resource r, uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0, rps::format format = rps::format::unknown )
 {
     ResourceViewDesc desc;
-    desc.Parent = r;
-    desc.Dimension = dimension;
     desc.Format = format;
-    desc.BaseMip = baseMip;
-    desc.Mips = 1;
-    desc.BaseArraySlice = baseArraySlice;
-    desc.ArrayLayers = numArraySlices;
-    desc.PlaneMask = 0x1;
-    desc.AccessFlags = rps::access::render_target;
-    desc.TemporalLayer = temporalLayer;
+    desc.TextureView = make_texture_range( baseMip, mipLevels, baseArraySlice, numArraySlices, planeMask, temporalLayer );
+    desc.BufferView = (BufferRange)0;
 
-    return create_view( desc );
+    return create_view( r, desc );
 }
 
-inline view create_dsv( resource r, uint dimension, uint baseMip, uint baseArraySlice = 0, uint numArraySlices = 1, format format = rps::format::unknown, uint planeMask = 0x3, bool bReadonly = false, uint temporalLayer = 0 )
+inline view create_buffer_view( resource r, uint64_t offset, uint64_t sizeInBytes = 0, uint temporalLayer = 0, rps::format format = rps::format::unknown )
 {
     ResourceViewDesc desc;
-    desc.Parent = r;
-    desc.Dimension = dimension;
     desc.Format = format;
-    desc.BaseMip = baseMip;
-    desc.Mips = 1;
-    desc.BaseArraySlice = baseArraySlice;
-    desc.ArrayLayers = numArraySlices;
-    desc.PlaneMask = planeMask; // TODO: consider format
-    desc.TemporalLayer = temporalLayer;
+    desc.TextureView = (SubResourceRange)0;
+    desc.BufferView = make_buffer_range( offset, sizeInBytes, temporalLayer );
 
-    if (bReadonly)
-        desc.AccessFlags = rps::access::depth_read;
-    else
-        desc.AccessFlags = rps::access::depth_write;
-
-    return create_view( desc );
+    return create_view( r, desc );
 }
 
-inline void clear( rtv d, float4 val )
+inline void clear( view d, float4 val )
 {
     return clear_view( d, rps::clear::color, asuint(val) );
 }
