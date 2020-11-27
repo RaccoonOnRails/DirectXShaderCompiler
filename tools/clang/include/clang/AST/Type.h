@@ -3655,6 +3655,7 @@ public:
     // HLSL Change Ends    
     // RPS Change Begins
     attr_rps_persistent,
+    attr_rps_relaxedordering,
     // RPS Change Ends
 
   };

@@ -45,6 +45,7 @@ DxilFieldAnnotation::DxilFieldAnnotation()
 , m_ResourceAttribute(nullptr)
 , m_CBufferOffset(UINT_MAX)
 , m_bCBufferVarUsed(false)
+, m_bRPSRelaxedOrdering(false) // RPS Change
 {}
 
 bool DxilFieldAnnotation::IsPrecise() const { return m_bPrecise; }
@@ -80,7 +81,10 @@ void DxilFieldAnnotation::SetFieldName(const std::string &FieldName) { m_FieldNa
 bool DxilFieldAnnotation::IsCBVarUsed() const { return m_bCBufferVarUsed; }
 void DxilFieldAnnotation::SetCBVarUsed(bool used) { m_bCBufferVarUsed = used; }
 
-
+// RPS Change Begins
+bool DxilFieldAnnotation::IsRPSRelaxedOrdering() const { return m_bRPSRelaxedOrdering; }
+void DxilFieldAnnotation::SetRPSRelaxedOrdering(bool relaxed) { m_bRPSRelaxedOrdering = relaxed; }
+// RPS Change Ends
 
 //------------------------------------------------------------------------------
 //

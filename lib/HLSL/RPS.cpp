@@ -1,6 +1,10 @@
 // Copyright (c) 2020 Advanced Micro Devices, Inc. All rights reserved.
 
 #include "dxc/HLSL/DxilGenerationPass.h"
+#include "dxc/HLSL/HLModule.h"
+#include "dxc/DXIL/DxilOperations.h"
+#include "dxc/DXIL/DxilFunctionProps.h"
+#include "dxc/DXIL/DxilModule.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
@@ -39,9 +43,40 @@ struct DxilToRps : public ModulePass {
     RPS_COMMAND_TYPE_EXTERNAL_WRITE_BIT         = (1 << 9),     ///< Command does some external write, such as updating debug CPU data.
   };
 
+  enum RpsResourceAccessFlagBits {
+    RPS_RESOURCE_ACCESS_NO_FLAGS                = 0,            ///< No resource flags are specified.
+    RPS_RESOURCE_ACCESS_NONE                    = 1 << 0,       ///< The resource will not be accessed. 
+    RPS_RESOURCE_ACCESS_COLOR_BIT               = 1 << 1,       ///< The resource will be accessed as a color buffer.
+    RPS_RESOURCE_ACCESS_DEPTH_WRITE_BIT         = 1 << 2,       ///< The resource will be accessed as a depth buffer for writing.
+    RPS_RESOURCE_ACCESS_DEPTH_READ_BIT          = 1 << 3,       ///< The resource will be accessed as a depth buffer for reading.
+    RPS_RESOURCE_ACCESS_STENCIL_WRITE_BIT       = 1 << 4,       ///< The resource will be accessed as a stencil buffer for writing.
+    RPS_RESOURCE_ACCESS_STENCIL_READ_BIT        = 1 << 5,       ///< The resource will be accessed as a stencil buffer for reading.
+    RPS_RESOURCE_ACCESS_COLOR_RESOLVE_BIT       = 1 << 6,       ///< The resource will be accessed for a color resolve operation.
+    RPS_RESOURCE_ACCESS_DEPTH_RESOLVE_BIT       = 1 << 7,       ///< The resource will be accessed for a depth resolve operation.
+    RPS_RESOURCE_ACCESS_INDEX_BUFFER_BIT        = 1 << 8,       ///< The resource will be accessed as an index buffer.
+    RPS_RESOURCE_ACCESS_CONSTANT_BUFFER_BIT     = 1 << 9,       ///< The resource will be accessed as a constant buffer.
+    RPS_RESOURCE_ACCESS_VERTEX_BUFFER_BIT       = 1 << 10,      ///< The resource will be accessed as a vertex buffer.
+    RPS_RESOURCE_ACCESS_INDIRECT_ARGS_BIT       = 1 << 11,      ///< The resource will be accessed as a set of indirect arguments for a draw or dispatch.
+    RPS_RESOURCE_ACCESS_PRESENT_BIT             = 1 << 12,      ///< The resource will be accessed for a presentation operation.
+    RPS_RESOURCE_ACCESS_SHADING_RATE_BIT        = 1 << 13,      ///< The resource will be accessed as a VRS shading rate image.
+    RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT         = 1 << 14,      ///< The resource will be accessed as a UAV for write access.
+    RPS_RESOURCE_ACCESS_STAGE_READ_BIT          = 1 << 15,      ///< The resource will be accessed as a SRV for read access.
+    RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT       = 1 << 16,      ///< The resource will be accessed from a vertex shader.
+    RPS_RESOURCE_ACCESS_PIXEL_SHADER_BIT        = 1 << 17,      ///< The resource will be accessed from a pixel shader.
+    RPS_RESOURCE_ACCESS_COMPUTE_SHADER_BIT      = 1 << 18,      ///< The resource will be accessed from a compute shader.
+    RPS_RESOURCE_ACCESS_TRANSFER_BIT            = 1 << 19,      ///< The resource will be accessed as part of a transfer operation.
+    RPS_RESOURCE_ACCESS_RESOLVE_BIT             = 1 << 20,      ///< The resource will be accessed as part of a resolve operation.
+    RPS_RESOURCE_ACCESS_CLEAR_BIT               = 1 << 21,      ///< The resource will be accessed as part of a clear operation.
+    RPS_RESOURCE_ACCESS_DISCARD_BIT             = 1 << 22,      ///< The resource will be discarded.
+    RPS_RESOURCE_ACCESS_RELAXED_ORDER_BIT       = 1 << 23,
+    RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_BUILD = 1 << 25,
+    RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ  = 1 << 26,
+  };
+
   struct RpsNodeDefInfo {
     StringRef name;
     uint32_t flags;
+    SmallVector<uint32_t, 16> paramFlags;
   };
 
   std::vector<RpsNodeDefInfo> m_RpsNodeInfos = {};
@@ -63,6 +98,13 @@ struct DxilToRps : public ModulePass {
   }
 
   bool runOnModule(Module &M) override {
+
+    hlsl::DxilModule &DM = M.GetDxilModule();
+
+    if (!DM.GetShaderModel()->IsRPS()) {
+      return false;
+    }
+
     m_ModuleNameSimplified = M.getName();
     if (!m_ModuleNameSimplified.empty()) {
       m_ModuleNameSimplified = llvm::sys::path::stem(m_ModuleNameSimplified);
@@ -281,6 +323,8 @@ struct DxilToRps : public ModulePass {
 
   bool runOnFunction(Module &M, Function &F) {
 
+    hlsl::DxilModule &DM = M.GetDxilModule();
+
     SmallPtrSet<llvm::User *, 32> toRemove;
 
 #if 0
@@ -338,7 +382,7 @@ struct DxilToRps : public ModulePass {
         bool isAsyncNode = false;
 
         // Check if it's a node call
-        auto nodeDefIdx = getNodeDefIndex(calleeF);
+        auto nodeDefIdx = getNodeDefIndex(DM, calleeF);
 
         if (nodeDefIdx >= 0) {
           auto nodeDefIdxVal = ConstantInt::get(
@@ -455,7 +499,10 @@ struct DxilToRps : public ModulePass {
     toRemove.erase(U);
   }
 
-  int32_t getNodeDefIndex(Function *F) {
+  int32_t getNodeDefIndex(hlsl::DxilModule &DM, Function *F) {
+
+    auto &DMTypeSystem = DM.GetTypeSystem();
+
     int32_t funcIndex = -1;
     if (F->getArgumentList().size() > 0) {
       auto &argList = F->getArgumentList();
@@ -492,9 +539,24 @@ struct DxilToRps : public ModulePass {
               funcIndex = static_cast<int32_t>(m_RpsNodeInfos.size());
               m_RpsNodeNameIndice.insert(
                   std::make_pair(funcName, m_RpsNodeInfos.size()));
+
               m_RpsNodeInfos.emplace_back();
               m_RpsNodeInfos.back().name = funcName;
               m_RpsNodeInfos.back().flags = nodeIdentifiers[iNodedef].flags;
+
+              auto pFuncAnnotation = DMTypeSystem.GetFunctionAnnotation(F);
+              if (pFuncAnnotation) {
+                m_RpsNodeInfos.back().paramFlags.resize(pFuncAnnotation->GetNumParameters(), 0);
+
+                for (uint32_t iArg = 0; iArg < pFuncAnnotation->GetNumParameters(); iArg++) {
+                  auto &argAnnotation = pFuncAnnotation->GetParameterAnnotation(iArg);
+                  uint32_t paramFlags = 0;
+                  if (argAnnotation.IsRPSRelaxedOrdering()) {
+                    paramFlags |= RPS_RESOURCE_ACCESS_RELAXED_ORDER_BIT;
+                  }
+                  m_RpsNodeInfos.back().paramFlags[iArg] = paramFlags;
+                }
+              }
             } else {
               funcIndex = funcIndexIter->second;
             }

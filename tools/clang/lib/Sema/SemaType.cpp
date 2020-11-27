@@ -4517,6 +4517,12 @@ static AttributeList::Kind getAttrListKind(AttributedType::Kind kind) {
   case AttributedType::attr_hlsl_globallycoherent:
     return AttributeList::AT_HLSLGloballyCoherent;
   // HLSL Change Ends
+  // RPS Change Begins
+  case AttributedType::attr_rps_persistent:
+    return AttributeList::AT_RPSPersistentResource;
+  case AttributedType::attr_rps_relaxedordering:
+    return AttributeList::AT_RPSRelaxedOrdering;
+  // RPS Change Ends
   }
   llvm_unreachable("unexpected attribute kind!");
 }
@@ -5846,6 +5852,10 @@ static bool handleHLSLTypeAttr(TypeProcessingState &State,
   case AttributeList::AT_HLSLSnorm:       TAK = AttributedType::attr_hlsl_snorm; break;
   case AttributeList::AT_HLSLGloballyCoherent:
     TAK = AttributedType::attr_hlsl_globallycoherent; break;
+  // RPS Change Begins
+  case AttributeList::AT_RPSRelaxedOrdering:    TAK = AttributedType::attr_rps_relaxedordering; break;
+  case AttributeList::AT_RPSPersistentResource: TAK = AttributedType::attr_rps_persistent; break;
+  // RPS Change Ends
   }
 
   Type = S.Context.getAttributedType(TAK, Type, Type);

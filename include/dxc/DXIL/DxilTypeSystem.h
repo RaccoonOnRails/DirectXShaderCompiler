@@ -82,6 +82,11 @@ public:
   bool IsCBVarUsed() const;
   void SetCBVarUsed(bool used);
 
+  // RPS Change Begins
+  bool IsRPSRelaxedOrdering() const;
+  void SetRPSRelaxedOrdering(bool relaxed);
+  // RPS Change Ends
+
 private:
   bool m_bPrecise;
   CompType m_CompType;
@@ -92,6 +97,10 @@ private:
   InterpolationMode m_InterpMode;
   std::string m_FieldName;
   bool m_bCBufferVarUsed; // true if this field represents a top level variable in CB structure, and it is used.
+  // RPS Change Begins
+  bool m_bRPSRelaxedOrdering;
+
+  // RPS Change Ends
 };
 
 class DxilTemplateArgAnnotation : DxilFieldAnnotation {

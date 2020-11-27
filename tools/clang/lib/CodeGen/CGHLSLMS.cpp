@@ -1662,6 +1662,13 @@ void CGMSHLSLRuntime::AddHLSLFunctionInfo(Function *F, const FunctionDecl *FD) {
     paramAnnotation.SetInterpolationMode(paramIM);
     SourceLocation paramSemanticLoc = SetSemantic(parmDecl, paramAnnotation);
 
+    
+    // RPS Change Begins
+    if (parmDecl->hasAttr<RPSRelaxedOrderingAttr>())
+      paramAnnotation.SetRPSRelaxedOrdering(true);
+    // RPS Change Ends
+
+
     DxilParamInputQual dxilInputQ = DxilParamInputQual::In;
 
     if (parmDecl->hasAttr<HLSLInOutAttr>())
