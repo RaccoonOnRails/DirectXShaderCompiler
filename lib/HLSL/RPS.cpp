@@ -76,7 +76,7 @@ struct DxilToRps : public ModulePass {
   };
 
   struct RpsNodeDefInfo {
-    StringRef name;
+    std::string name;
     uint32_t flags;
     SmallVector<uint32_t, 16> paramFlags;
   };
@@ -95,7 +95,7 @@ struct DxilToRps : public ModulePass {
     RawBytes,
   };
 
-  StringRef AddModuleNamePostfix(const char *prefix, Module &M) {
+  std::string AddModuleNamePostfix(const char *prefix, Module &M) {
     return (prefix + std::string(m_ModuleNameSimplified.empty() ? "" : "_") + m_ModuleNameSimplified);
   }
 
