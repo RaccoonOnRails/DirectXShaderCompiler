@@ -104,6 +104,7 @@ struct DxilFunctionProps {
   }
   bool IsMS() const { return shaderKind == DXIL::ShaderKind::Mesh; }
   bool IsAS() const { return shaderKind == DXIL::ShaderKind::Amplification; }
+  bool IsRPS() const { return shaderKind == DXIL::ShaderKind::RenderPipeline; }
 };
 
 } // namespace hlsl

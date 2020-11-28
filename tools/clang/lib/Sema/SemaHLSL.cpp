@@ -11192,6 +11192,10 @@ void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, 
     declAttr = ::new (S.Context) RPSPersistentResourceAttr(
         A.getRange(), S.Context, A.getAttributeSpellingListIndex());
     break;
+  case AttributeList::AT_HLSLExport:
+    declAttr = ::new (S.Context) HLSLExportAttr(
+        A.getRange(), S.Context, A.getAttributeSpellingListIndex());
+    break;
 // RPS Change Ends
 
   default:

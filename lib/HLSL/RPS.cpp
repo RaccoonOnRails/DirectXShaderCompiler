@@ -71,6 +71,8 @@ struct DxilToRps : public ModulePass {
     RPS_RESOURCE_ACCESS_RELAXED_ORDER_BIT       = 1 << 23,
     RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_BUILD = 1 << 25,
     RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ  = 1 << 26,
+    RPS_RESOURCE_ACCESS_CPU_READ                = 1 << 27,
+    RPS_RESOURCE_ACCESS_CPU_WRITE               = 1 << 28,
   };
 
   struct RpsNodeDefInfo {
@@ -120,7 +122,7 @@ struct DxilToRps : public ModulePass {
 
     auto int8PtrType = Type::getInt8PtrTy(M.getContext());
     auto paramPushFunc =
-        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType, intType, intType, nullptr);
+        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType, intType, intType, intType, nullptr);
     m_RpsNodeParamPushFunc = dyn_cast<Function>(paramPushFunc);
     m_RpsNodeParamPushFunc->setLinkage(GlobalValue::ExternalLinkage);
 
@@ -333,26 +335,12 @@ struct DxilToRps : public ModulePass {
 #endif
 
     bool bIsExportEntry = false;
-
-#if 0 // TODO: dummy return rpsexportidentifier breaks control flow atm.
-    // Check for rpsexport entry functions
-    if (F.getReturnType()->isVoidTy() && (F.arg_size() > 1) &&
-        F.hasStructRetAttr()) {
-      auto firstArg = F.arg_begin();
-      if (firstArg->getType()->isPointerTy()) {
-        auto pPtrType = dyn_cast<PointerType>(firstArg->getType());
-        if (pPtrType->getElementType()->isStructTy() &&
-            (pPtrType->getElementType()->getStructName() ==
-             "struct.rpsexportidentifier")) {
-          bIsExportEntry = true;
-        }
+    if (DM.HasDxilFunctionProps(&F)) {
+      auto &FuncProp = DM.GetDxilFunctionProps(&F);
+      if(FuncProp.IsRPS()) {
+        bIsExportEntry = true;
       }
     }
-#else
-    if (F.hasFnAttribute(llvm::Attribute::AttrKind::NoInline)) {
-      bIsExportEntry = true;
-    }
-#endif
 
     // Demangle rpsexport function
     if (bIsExportEntry) {
@@ -415,7 +403,8 @@ struct DxilToRps : public ModulePass {
           Instruction *firstCastInst = nullptr;
           Instruction *firstPushInst = nullptr;
 
-          for (; argIter != callSite.arg_end(); argIter++) {
+          uint32_t argIndex = 1;
+          for (; argIter != callSite.arg_end(); argIter++, argIndex++) {
 
             auto argValue = argIter->get();
 
@@ -453,9 +442,13 @@ struct DxilToRps : public ModulePass {
             ConstantInt *paramTypeCategoryVal = ConstantInt::get(
                 M.getContext(), APInt(32, uint32_t(paramTypeCategory)));
 
+            ConstantInt *paramFlagsVal = ConstantInt::get(
+                M.getContext(),
+                APInt(32, uint32_t(nodeDefInfo.paramFlags[argIndex])));
+
             auto pushInst = CallInst::Create(
                 m_RpsNodeParamPushFunc,
-                { argAsBytePtrVal, argSizeInBytesVal, paramTypeCategoryVal },
+                { argAsBytePtrVal, argSizeInBytesVal, paramTypeCategoryVal, paramFlagsVal },
                 "", callInst);
 
             firstPushInst = firstPushInst ? firstPushInst : pushInst;
@@ -613,7 +606,7 @@ struct DxilToRps : public ModulePass {
     nodedefNameArrayVar->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
   }
 
-  StringRef DemangleNames(const StringRef &name) {
+  std::string DemangleNames(const StringRef &name) {
     auto start = name.find_first_of('?');
     auto end = name.find_first_of('@');
     return name.substr(start + 1, end - start - 1);

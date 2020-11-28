@@ -1196,6 +1196,7 @@ void CGMSHLSLRuntime::AddHLSLFunctionInfo(Function *F, const FunctionDecl *FD) {
   bool isRay = false;
   bool isMS = false;
   bool isAS = false;
+  bool isRPS = false; // RPS Change
   if (const HLSLShaderAttr *Attr = FD->getAttr<HLSLShaderAttr>()) {
     // Stage is already validate in HandleDeclAttributeForHLSL.
     // Here just check first letter (or two).
@@ -1534,7 +1535,18 @@ void CGMSHLSLRuntime::AddHLSLFunctionInfo(Function *F, const FunctionDecl *FD) {
     funcProps->shaderKind = DXIL::ShaderKind::Pixel;
   }
 
-  const unsigned profileAttributes = isCS + isHS + isDS + isGS + isVS + isPS + isRay + isMS + isAS;
+  // RPS Change Begins
+  // Render Pipeline Shader
+  if (SM->IsRPS()) {
+    if (const HLSLExportAttr *Attr = FD->getAttr<HLSLExportAttr>()) {
+      funcProps->shaderKind = DXIL::ShaderKind::RenderPipeline;
+      isRPS = true;
+    }
+  }
+
+  // RPS Change Ends
+
+  const unsigned profileAttributes = isCS + isHS + isDS + isGS + isVS + isPS + isRay + isMS + isAS + isRPS; // RPS Change
 
   // TODO: check this in front-end and report error.
   DXASSERT(profileAttributes < 2, "profile attributes are mutual exclusive");
