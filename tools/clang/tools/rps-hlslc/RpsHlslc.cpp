@@ -431,9 +431,11 @@ ProcessContainerParts(const ComPtr<IDxcBlob> &pOriginalContainer,
       UINT32 partKind = 0;
       pRefl->GetPartKind(iPart, &partKind);
 
+#if 0
       printf("\nProcessing part %c%c%c%c", partKind & 0xff,
              (partKind >> 8) & 0xff, (partKind >> 16) & 0xff,
              (partKind >> 24) & 0xff); //'LIXD'
+#endif
 
       auto pProcessedPart = processPartCb(partKind, pPartContent);
 
