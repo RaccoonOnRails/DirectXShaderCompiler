@@ -3816,7 +3816,6 @@ HLSLReservedKeyword:
     //case tok::kw_write:
     //case tok::kw_rw:
     case tok::kw_relaxed:
-    case tok::kw_persistent:
       if (getLangOpts().HLSL) {
         if (DS.getTypeSpecType() != DeclSpec::TST_unspecified) {
           PrevSpec = "";
@@ -5154,9 +5153,6 @@ bool Parser::isTypeSpecifierQualifier() {
   case tok::kw_snorm:
   case tok::kw_unorm:
     // HLSL Change Ends
-    // RPS Change Starts
-  case tok::kw_persistent:
-    // RPS Change Ends
     return true;
 
     // GNU ObjC bizarre protocol extension: <proto1,proto2> with implicit 'id'.
@@ -5277,7 +5273,6 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
   // HLSL Change Ends
 
   // RPS Change Starts
-  case tok::kw_persistent:
   case tok::kw_graphics:
   case tok::kw_compute:
   case tok::kw_copy:

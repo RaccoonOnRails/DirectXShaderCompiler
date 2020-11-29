@@ -11234,10 +11234,6 @@ void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, 
     declAttr = ::new (S.Context) RPSRelaxedOrderingAttr(
         A.getRange(), S.Context, A.getAttributeSpellingListIndex());
     break;
-  case AttributeList::AT_RPSPersistentResource:
-    declAttr = ::new (S.Context) RPSPersistentResourceAttr(
-        A.getRange(), S.Context, A.getAttributeSpellingListIndex());
-    break;
 // RPS Change Ends
 
   default:
@@ -12754,10 +12750,6 @@ void hlsl::CustomPrintHLSLAttr(const clang::Attr *A, llvm::raw_ostream &Out, con
     Out << "copy\n";
     break;
 
-  case clang::attr::RPSPersistentResource:
-    Out << "persistent ";
-    break;
-
   case clang::attr::RPSRelaxedOrdering:
     Out << "relaxed ";
     break;
@@ -12862,7 +12854,6 @@ bool hlsl::IsHLSLAttr(clang::attr::Kind AttrKind) {
   case clang::attr::RPSGraphicsNode:
   case clang::attr::RPSComputeNode:
   case clang::attr::RPSCopyNode:
-  case clang::attr::RPSPersistentResource:
   case clang::attr::RPSRelaxedOrdering:
   case clang::attr::RPSResourceAccessReadOnly:
   case clang::attr::RPSResourceAccessWrite:

@@ -118,6 +118,13 @@ __RPS_BEGIN_DECL_ENUM(resource_type)
     __RPS_ENUM_VALUE(tex3d, 3)
 __RPS_END_DECL_ENUM()
 
+__RPS_BEGIN_DECL_ENUM(resource_flags)
+    __RPS_ENUM_VALUE(none,                      0)
+    __RPS_ENUM_VALUE(persistent,           1 << 0)
+    __RPS_ENUM_VALUE(dedicatedallocation,  1 << 1)
+    __RPS_ENUM_VALUE(sytemmemory,          1 << 2)
+__RPS_END_DECL_ENUM()
+
 __RPS_BEGIN_DECL_ENUM(format)
     __RPS_ENUM_VALUE(unknown                  , 0)
     __RPS_ENUM_VALUE(r32g32b32a32_typeless    , 1)
@@ -252,6 +259,7 @@ struct SampleDesc
 struct ResourceDesc
 {
     rps::resource_type Dimension;
+    rps::resource_flags Flags;
     rps::format Format;
     uint64_t Width;
     uint Height;
@@ -291,10 +299,11 @@ resource create_resource( ResourceDesc desc );
 view create_view( resource r, ResourceViewDesc desc );
 void clear_view( view v, rps::clear option, uint4 data );
 
-inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, rps::format format, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0 )
+inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, rps::format format, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0, rps::resource_flags flags = rps::resource_flags::none )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resource_type::tex2d;
+    desc.Flags = flags;
     desc.Format = format;
     desc.Width = width;
     desc.Height = height;
@@ -307,10 +316,11 @@ inline resource create_tex2d( uint width, uint height, uint arraySlices, uint nu
     return create_resource(desc);
 }
 
-inline resource create_tex3d( uint width, uint height, uint depth, uint numMips, rps::format format, uint numTemporalLayers = 1 )
+inline resource create_tex3d( uint width, uint height, uint depth, uint numMips, rps::format format, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resource_type::tex2d;
+    desc.Flags = flags;
     desc.Format = format;
     desc.Width = width;
     desc.Height = height;
@@ -323,10 +333,11 @@ inline resource create_tex3d( uint width, uint height, uint depth, uint numMips,
     return create_resource(desc);
 }
 
-inline resource create_buffer( uint64_t width, uint numTemporalLayers = 1 )
+inline resource create_buffer( uint64_t width, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resource_type::buffer;
+    desc.Flags = flags;
     desc.Format = rps::format::unknown;
     desc.Width = width;
     desc.Height = 1;

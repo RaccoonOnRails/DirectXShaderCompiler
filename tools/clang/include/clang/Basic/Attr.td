@@ -933,12 +933,6 @@ def RPSRelaxedOrdering : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def RPSPersistentResource : InheritableAttr {
-  let Spellings = [CXX11<"", "persistent", 2015>];
-  let Subjects = SubjectList<[Var]>;
-  let Documentation = [Undocumented];
-}
-
 def RPSGraphicsNode : InheritableAttr {
   let Spellings = [CXX11<"", "graphics", 2015>];
   let Subjects = SubjectList<[Function], ErrorDiag, "ExpectedFunction">;

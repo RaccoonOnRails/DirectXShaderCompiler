@@ -2943,7 +2943,6 @@ bool AttributedType::isHLSLTypeSpec() const {
   case attr_hlsl_snorm:
   case attr_hlsl_unorm:
   case attr_hlsl_globallycoherent:
-  case attr_rps_persistent: // RPS Change
     return true;
   }
   llvm_unreachable("invalid attr kind");
@@ -2974,7 +2973,6 @@ bool AttributedType::isCallingConv() const {
   case attr_hlsl_snorm:
   case attr_hlsl_unorm:
   case attr_hlsl_globallycoherent:
-  case attr_rps_persistent: // RPS Change
   // HLSL Change Ends
     return false;
 

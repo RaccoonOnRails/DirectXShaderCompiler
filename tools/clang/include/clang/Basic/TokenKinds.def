@@ -526,7 +526,6 @@ KEYWORD(graphics                    , KEYHLSL)
 KEYWORD(compute                     , KEYHLSL)
 KEYWORD(copy                        , KEYHLSL)
 KEYWORD(relaxed                     , KEYHLSL)
-KEYWORD(persistent                  , KEYHLSL)
 
 // OpenCL address space qualifiers
 KEYWORD(__global                    , KEYOPENCL)
