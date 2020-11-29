@@ -39,7 +39,7 @@ struct DxilToRps : public ModulePass {
   };
 
   struct RpsNodeDefInfo {
-    StringRef name;
+    std::string name;
     uint32_t flags;
   };
 
@@ -56,7 +56,7 @@ struct DxilToRps : public ModulePass {
     RawBytes,
   };
 
-  static StringRef AddModuleNamePostfix(const char *prefix, Module &M) {
+  static std::string AddModuleNamePostfix(const char *prefix, Module &M) {
     return (prefix + std::string(M.getName().empty() ? "" : "_") + M.getName()).str();
   }
 
@@ -541,7 +541,7 @@ struct DxilToRps : public ModulePass {
     nodedefNameArrayVar->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
   }
 
-  StringRef DemangleNames(const StringRef &name) {
+  std::string DemangleNames(const StringRef &name) {
     auto start = name.find_first_of('?');
     auto end = name.find_first_of('@');
     return name.substr(start + 1, end - start - 1);
