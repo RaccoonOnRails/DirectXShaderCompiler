@@ -231,68 +231,6 @@ struct DxilToRps : public ModulePass {
     return WrapperFn;
   }
 
-  // Temporary solution for hacking "async" in.
-  template<unsigned N>
-  bool FindRawBufferStoreRecursive(llvm::User *user,
-                                   llvm::SmallPtrSet<llvm::User *, N> &toRemove) {
-    bool bFound = false;
-    auto name = user->getName();
-
-    auto asCallInst = dyn_cast<CallInst>(user);
-    if (asCallInst) {
-      auto userFunc = asCallInst->getCalledFunction();
-      auto userFuncName = userFunc->getName();
-      
-      if (userFuncName.startswith("dx.op.rawBufferStore") ||
-          userFuncName.startswith("dx.op.bufferStore.i32")) {
-        auto secondArg = asCallInst->getArgOperand(1);
-
-        assert(secondArg && secondArg->getType()->isStructTy() &&
-               (secondArg->getType()->getStructName() == "dx.types.Handle"));
-
-        toRemove.insert(user);
-
-        auto handleArgInst = dyn_cast<CallInst>(secondArg);
-        if (handleArgInst) {
-          toRemove.insert(handleArgInst);
-
-          auto resourceStructArg = handleArgInst->getOperand(1);
-          auto resourceStructArgLoadInst = dyn_cast<Instruction>(resourceStructArg);
-          if (resourceStructArgLoadInst) {
-            toRemove.insert(resourceStructArgLoadInst);
-          }
-        }
-        return true;
-      }
-    }
-
-    for (auto nextUser : user->users()) {
-
-      if (FindRawBufferStoreRecursive(nextUser, toRemove)) {
-
-        toRemove.insert(user);
-
-        bFound = true;
-        break;
-      }
-    }
-
-    return bFound;
-  }
-
-  template <unsigned N>
-  bool IsAsyncMarker(llvm::Value *argValue,
-                     llvm::SmallPtrSet<llvm::User *, N> &toRemove) {
-    bool bFound = false;
-    for (auto user : argValue->users()) {
-      if (FindRawBufferStoreRecursive(user, toRemove)) {
-        bFound = true;
-        break;
-      }
-    }
-    return bFound;
-  }
-
   bool runOnFunction(Module &M, Function &F) {
 
     hlsl::DxilModule &DM = M.GetDxilModule();
