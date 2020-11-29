@@ -4518,6 +4518,12 @@ static AttributeList::Kind getAttrListKind(AttributedType::Kind kind) {
     return AttributeList::AT_HLSLGloballyCoherent;
   // HLSL Change Ends
   // RPS Change Begins
+  case AttributedType::attr_rps_graphics_node:
+    return AttributeList::AT_RPSGraphicsNode;
+  case AttributedType::attr_rps_compute_node:
+    return AttributeList::AT_RPSComputeNode;
+  case AttributedType::attr_rps_copy_node:
+    return AttributeList::AT_RPSCopyNode;
   case AttributedType::attr_rps_persistent:
     return AttributeList::AT_RPSPersistentResource;
   case AttributedType::attr_rps_relaxedordering:
@@ -5855,6 +5861,9 @@ static bool handleHLSLTypeAttr(TypeProcessingState &State,
   // RPS Change Begins
   case AttributeList::AT_RPSRelaxedOrdering:    TAK = AttributedType::attr_rps_relaxedordering; break;
   case AttributeList::AT_RPSPersistentResource: TAK = AttributedType::attr_rps_persistent; break;
+  case AttributeList::AT_RPSGraphicsNode:       TAK = AttributedType::attr_rps_graphics_node; break;
+  case AttributeList::AT_RPSComputeNode:        TAK = AttributedType::attr_rps_compute_node; break;
+  case AttributeList::AT_RPSCopyNode:           TAK = AttributedType::attr_rps_copy_node; break;
   // RPS Change Ends
   }
 

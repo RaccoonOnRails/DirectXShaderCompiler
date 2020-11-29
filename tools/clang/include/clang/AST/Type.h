@@ -3654,6 +3654,9 @@ public:
     attr_hlsl_globallycoherent,
     // HLSL Change Ends    
     // RPS Change Begins
+    attr_rps_graphics_node,
+    attr_rps_compute_node,
+    attr_rps_copy_node,
     attr_rps_persistent,
     attr_rps_relaxedordering,
     // RPS Change Ends

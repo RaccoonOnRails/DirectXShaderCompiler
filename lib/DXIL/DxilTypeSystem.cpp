@@ -45,7 +45,7 @@ DxilFieldAnnotation::DxilFieldAnnotation()
 , m_ResourceAttribute(nullptr)
 , m_CBufferOffset(UINT_MAX)
 , m_bCBufferVarUsed(false)
-, m_bRPSRelaxedOrdering(false) // RPS Change
+, m_RpsAccessFlags(DXIL::RPS::RPS_RESOURCE_ACCESS_NO_FLAGS) // RPS Change
 {}
 
 bool DxilFieldAnnotation::IsPrecise() const { return m_bPrecise; }
@@ -82,8 +82,12 @@ bool DxilFieldAnnotation::IsCBVarUsed() const { return m_bCBufferVarUsed; }
 void DxilFieldAnnotation::SetCBVarUsed(bool used) { m_bCBufferVarUsed = used; }
 
 // RPS Change Begins
-bool DxilFieldAnnotation::IsRPSRelaxedOrdering() const { return m_bRPSRelaxedOrdering; }
-void DxilFieldAnnotation::SetRPSRelaxedOrdering(bool relaxed) { m_bRPSRelaxedOrdering = relaxed; }
+DXIL::RPS::RpsResourceAccessFlagBits DxilFieldAnnotation::GetRPSAccessFlags() const {
+    return m_RpsAccessFlags;
+}
+void DxilFieldAnnotation::SetRPSAccessFlags(DXIL::RPS::RpsResourceAccessFlagBits accessFlags) {
+  m_RpsAccessFlags = accessFlags;
+}
 // RPS Change Ends
 
 //------------------------------------------------------------------------------

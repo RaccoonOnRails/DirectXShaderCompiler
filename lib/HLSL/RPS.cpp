@@ -1,10 +1,12 @@
 // Copyright (c) 2020 Advanced Micro Devices, Inc. All rights reserved.
 
 #include "dxc/HLSL/DxilGenerationPass.h"
+#include "dxc/DXIL/DxilConstants.h"
 #include "dxc/HLSL/HLModule.h"
 #include "dxc/DXIL/DxilOperations.h"
 #include "dxc/DXIL/DxilFunctionProps.h"
 #include "dxc/DXIL/DxilModule.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
@@ -41,38 +43,6 @@ struct DxilToRps : public ModulePass {
     RPS_COMMAND_TYPE_PREFER_ASYNC_BIT           = (1 << 7),     ///< The command type prefers to run on an async queue.
     RPS_COMMAND_TYPE_CUSTOM_VIEWPORT_BIT        = (1 << 8),     ///< The callback will set a custom viewport & scissor.
     RPS_COMMAND_TYPE_EXTERNAL_WRITE_BIT         = (1 << 9),     ///< Command does some external write, such as updating debug CPU data.
-  };
-
-  enum RpsResourceAccessFlagBits {
-    RPS_RESOURCE_ACCESS_NO_FLAGS                = 0,            ///< No resource flags are specified.
-    RPS_RESOURCE_ACCESS_NONE                    = 1 << 0,       ///< The resource will not be accessed. 
-    RPS_RESOURCE_ACCESS_COLOR_BIT               = 1 << 1,       ///< The resource will be accessed as a color buffer.
-    RPS_RESOURCE_ACCESS_DEPTH_WRITE_BIT         = 1 << 2,       ///< The resource will be accessed as a depth buffer for writing.
-    RPS_RESOURCE_ACCESS_DEPTH_READ_BIT          = 1 << 3,       ///< The resource will be accessed as a depth buffer for reading.
-    RPS_RESOURCE_ACCESS_STENCIL_WRITE_BIT       = 1 << 4,       ///< The resource will be accessed as a stencil buffer for writing.
-    RPS_RESOURCE_ACCESS_STENCIL_READ_BIT        = 1 << 5,       ///< The resource will be accessed as a stencil buffer for reading.
-    RPS_RESOURCE_ACCESS_COLOR_RESOLVE_BIT       = 1 << 6,       ///< The resource will be accessed for a color resolve operation.
-    RPS_RESOURCE_ACCESS_DEPTH_RESOLVE_BIT       = 1 << 7,       ///< The resource will be accessed for a depth resolve operation.
-    RPS_RESOURCE_ACCESS_INDEX_BUFFER_BIT        = 1 << 8,       ///< The resource will be accessed as an index buffer.
-    RPS_RESOURCE_ACCESS_CONSTANT_BUFFER_BIT     = 1 << 9,       ///< The resource will be accessed as a constant buffer.
-    RPS_RESOURCE_ACCESS_VERTEX_BUFFER_BIT       = 1 << 10,      ///< The resource will be accessed as a vertex buffer.
-    RPS_RESOURCE_ACCESS_INDIRECT_ARGS_BIT       = 1 << 11,      ///< The resource will be accessed as a set of indirect arguments for a draw or dispatch.
-    RPS_RESOURCE_ACCESS_PRESENT_BIT             = 1 << 12,      ///< The resource will be accessed for a presentation operation.
-    RPS_RESOURCE_ACCESS_SHADING_RATE_BIT        = 1 << 13,      ///< The resource will be accessed as a VRS shading rate image.
-    RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT         = 1 << 14,      ///< The resource will be accessed as a UAV for write access.
-    RPS_RESOURCE_ACCESS_STAGE_READ_BIT          = 1 << 15,      ///< The resource will be accessed as a SRV for read access.
-    RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT       = 1 << 16,      ///< The resource will be accessed from a vertex shader.
-    RPS_RESOURCE_ACCESS_PIXEL_SHADER_BIT        = 1 << 17,      ///< The resource will be accessed from a pixel shader.
-    RPS_RESOURCE_ACCESS_COMPUTE_SHADER_BIT      = 1 << 18,      ///< The resource will be accessed from a compute shader.
-    RPS_RESOURCE_ACCESS_TRANSFER_BIT            = 1 << 19,      ///< The resource will be accessed as part of a transfer operation.
-    RPS_RESOURCE_ACCESS_RESOLVE_BIT             = 1 << 20,      ///< The resource will be accessed as part of a resolve operation.
-    RPS_RESOURCE_ACCESS_CLEAR_BIT               = 1 << 21,      ///< The resource will be accessed as part of a clear operation.
-    RPS_RESOURCE_ACCESS_DISCARD_BIT             = 1 << 22,      ///< The resource will be discarded.
-    RPS_RESOURCE_ACCESS_RELAXED_ORDER_BIT       = 1 << 23,
-    RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_BUILD = 1 << 25,
-    RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ  = 1 << 26,
-    RPS_RESOURCE_ACCESS_CPU_READ                = 1 << 27,
-    RPS_RESOURCE_ACCESS_CPU_WRITE               = 1 << 28,
   };
 
   struct RpsNodeDefInfo {
@@ -329,16 +299,11 @@ struct DxilToRps : public ModulePass {
 
     SmallPtrSet<llvm::User *, 32> toRemove;
 
-#if 0
-    auto attrs = F.getAttributes();
-    printf("Attrs: %s", attrs.getAsString(AttributeSet::FunctionIndex).c_str());
-#endif
-
     bool bIsExportEntry = false;
     if (DM.HasDxilFunctionProps(&F)) {
       auto &FuncProp = DM.GetDxilFunctionProps(&F);
       if(FuncProp.IsRPS()) {
-        bIsExportEntry = true;
+        bIsExportEntry = (FuncProp.ShaderProps.RPS.entryKind == hlsl::DXIL::RPS::EntryKind::ExportEntry);
       }
     }
 
@@ -502,15 +467,27 @@ struct DxilToRps : public ModulePass {
       auto arg = argList.begin();
       auto argType = arg->getType();
 
-      static const struct {
-        const char *name;
-        unsigned flags;
-      } nodeIdentifiers[] = {
-        { "struct.nodeidentifier", RPS_COMMAND_TYPE_NO_FLAGS },
-        { "struct.gfxnodeidentifier", RPS_COMMAND_TYPE_GRAPHICS_BIT },
-        { "struct.compnodeidentifier", RPS_COMMAND_TYPE_COMPUTE_BIT },
-        { "struct.copynodeidentifier", RPS_COMMAND_TYPE_COPY_BIT },
+      static const uint32_t entryKindToFlags[] = {
+        RPS_COMMAND_TYPE_NO_FLAGS,
+        RPS_COMMAND_TYPE_NO_FLAGS,
+        RPS_COMMAND_TYPE_GRAPHICS_BIT,
+        RPS_COMMAND_TYPE_COMPUTE_BIT,
+        RPS_COMMAND_TYPE_COPY_BIT,
       };
+
+      static_assert(sizeof(entryKindToFlags) / sizeof(entryKindToFlags[0]) == uint32_t(hlsl::DXIL::RPS::EntryKind::MaxValue),
+          "Mismatching entryKindToFlags and hlsl::DXIL::RPS::EntryKind");
+
+      bool isNodeDef = false;
+      uint32_t nodeFlags = RPS_COMMAND_TYPE_NO_FLAGS;
+      if (DM.HasDxilFunctionProps(F)) {
+        auto &FuncProp = DM.GetDxilFunctionProps(F);
+        if (FuncProp.IsRPS()) {
+          nodeFlags =
+              entryKindToFlags[uint32_t(FuncProp.ShaderProps.RPS.entryKind)];
+          isNodeDef = true;
+        }
+      }
 
       if (argType->isPointerTy()) {
         auto argPtrType = dyn_cast<PointerType>(argType);
@@ -518,15 +495,14 @@ struct DxilToRps : public ModulePass {
         if (elemType) {
           auto name = elemType->getName();
 
-          unsigned iNodedef = 0;
-          for (; iNodedef < _countof(nodeIdentifiers); iNodedef++) {
-            if (name == nodeIdentifiers[iNodedef].name) {
-              break;
-            }
-          }
-
-          if (iNodedef < _countof(nodeIdentifiers)) {
+          if (isNodeDef) {
             auto funcName = F->getName();
+
+            if (name != "struct.nodeidentifier") {
+              // TODO: Report error
+              return -1;
+            }
+
             auto funcIndexIter = m_RpsNodeNameIndice.find(funcName);
             if (funcIndexIter == m_RpsNodeNameIndice.end()) {
               funcIndex = static_cast<int32_t>(m_RpsNodeInfos.size());
@@ -535,7 +511,7 @@ struct DxilToRps : public ModulePass {
 
               m_RpsNodeInfos.emplace_back();
               m_RpsNodeInfos.back().name = funcName;
-              m_RpsNodeInfos.back().flags = nodeIdentifiers[iNodedef].flags;
+              m_RpsNodeInfos.back().flags = nodeFlags;
 
               auto pFuncAnnotation = DMTypeSystem.GetFunctionAnnotation(F);
               if (pFuncAnnotation) {
@@ -543,11 +519,7 @@ struct DxilToRps : public ModulePass {
 
                 for (uint32_t iArg = 0; iArg < pFuncAnnotation->GetNumParameters(); iArg++) {
                   auto &argAnnotation = pFuncAnnotation->GetParameterAnnotation(iArg);
-                  uint32_t paramFlags = 0;
-                  if (argAnnotation.IsRPSRelaxedOrdering()) {
-                    paramFlags |= RPS_RESOURCE_ACCESS_RELAXED_ORDER_BIT;
-                  }
-                  m_RpsNodeInfos.back().paramFlags[iArg] = paramFlags;
+                  m_RpsNodeInfos.back().paramFlags[iArg] = argAnnotation.GetRPSAccessFlags();
                 }
               }
             } else {

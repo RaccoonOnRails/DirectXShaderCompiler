@@ -1442,6 +1442,59 @@ namespace DXIL {
   static const char *kDxBreakFuncName = "dx.break";
   static const char *kDxBreakCondName = "dx.break.cond";
 
-} // namespace DXIL
+  // RPS Change Begins
+  namespace RPS {
+    enum class EntryKind {
+      None,
+      ExportEntry,
+      GraphicsNodeDef,
+      ComputeNodeDef,
+      CopyNodeDef,
+      MaxValue,
+    };
+
+    enum RpsResourceAccessFlagBits {
+      RPS_RESOURCE_ACCESS_NO_FLAGS                = 0,            ///< No resource flags are specified.
+      RPS_RESOURCE_ACCESS_NONE                    = 1 << 0,       ///< The resource will not be accessed. 
+      RPS_RESOURCE_ACCESS_COLOR_BIT               = 1 << 1,       ///< The resource will be accessed as a color buffer.
+      RPS_RESOURCE_ACCESS_DEPTH_WRITE_BIT         = 1 << 2,       ///< The resource will be accessed as a depth buffer for writing.
+      RPS_RESOURCE_ACCESS_DEPTH_READ_BIT          = 1 << 3,       ///< The resource will be accessed as a depth buffer for reading.
+      RPS_RESOURCE_ACCESS_STENCIL_WRITE_BIT       = 1 << 4,       ///< The resource will be accessed as a stencil buffer for writing.
+      RPS_RESOURCE_ACCESS_STENCIL_READ_BIT        = 1 << 5,       ///< The resource will be accessed as a stencil buffer for reading.
+      RPS_RESOURCE_ACCESS_COLOR_RESOLVE_BIT       = 1 << 6,       ///< The resource will be accessed for a color resolve operation.
+      RPS_RESOURCE_ACCESS_DEPTH_RESOLVE_BIT       = 1 << 7,       ///< The resource will be accessed for a depth resolve operation.
+      RPS_RESOURCE_ACCESS_INDEX_BUFFER_BIT        = 1 << 8,       ///< The resource will be accessed as an index buffer.
+      RPS_RESOURCE_ACCESS_CONSTANT_BUFFER_BIT     = 1 << 9,       ///< The resource will be accessed as a constant buffer.
+      RPS_RESOURCE_ACCESS_VERTEX_BUFFER_BIT       = 1 << 10,      ///< The resource will be accessed as a vertex buffer.
+      RPS_RESOURCE_ACCESS_INDIRECT_ARGS_BIT       = 1 << 11,      ///< The resource will be accessed as a set of indirect arguments for a draw or dispatch.
+      RPS_RESOURCE_ACCESS_PRESENT_BIT             = 1 << 12,      ///< The resource will be accessed for a presentation operation.
+      RPS_RESOURCE_ACCESS_SHADING_RATE_BIT        = 1 << 13,      ///< The resource will be accessed as a VRS shading rate image.
+      RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT         = 1 << 14,      ///< The resource will be accessed as a UAV for write access.
+      RPS_RESOURCE_ACCESS_STAGE_READ_BIT          = 1 << 15,      ///< The resource will be accessed as a SRV for read access.
+      RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT       = 1 << 16,      ///< The resource will be accessed from a vertex shader.
+      RPS_RESOURCE_ACCESS_PIXEL_SHADER_BIT        = 1 << 17,      ///< The resource will be accessed from a pixel shader.
+      RPS_RESOURCE_ACCESS_COMPUTE_SHADER_BIT      = 1 << 18,      ///< The resource will be accessed from a compute shader.
+      RPS_RESOURCE_ACCESS_TRANSFER_BIT            = 1 << 19,      ///< The resource will be accessed as part of a transfer operation.
+      RPS_RESOURCE_ACCESS_RESOLVE_BIT             = 1 << 20,      ///< The resource will be accessed as part of a resolve operation.
+      RPS_RESOURCE_ACCESS_CLEAR_BIT               = 1 << 21,      ///< The resource will be accessed as part of a clear operation.
+      RPS_RESOURCE_ACCESS_DISCARD_BIT             = 1 << 22,      ///< The resource will be discarded.
+      RPS_RESOURCE_ACCESS_RELAXED_ORDER_BIT       = 1 << 23,
+      RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_BIT = 1 << 25,
+      RPS_RESOURCE_ACCESS_CPU_BIT                 = 1 << 26,
+
+      //TODO: Assign shader bits properly.
+      RPS_RESOURCE_ACCESS_GEOMETRY_SHADER_BIT     = RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT,
+      RPS_RESOURCE_ACCESS_DOMAIN_SHADER_BIT       = RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT,
+      RPS_RESOURCE_ACCESS_HULL_SHADER_BIT         = RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT,
+      RPS_RESOURCE_ACCESS_TASK_SHADER_BIT         = RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT,
+      RPS_RESOURCE_ACCESS_MESH_SHADER_BIT         = RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT,
+      RPS_RESOURCE_ACCESS_RAYTRACING_SHADER_BIT   = RPS_RESOURCE_ACCESS_COMPUTE_SHADER_BIT,
+      RPS_RESOURCE_ACCESS_PREDICATION_BIT         = RPS_RESOURCE_ACCESS_INDIRECT_ARGS_BIT,
+      RPS_RESOURCE_ACCESS_STREAMOUT_BIT           = RPS_RESOURCE_ACCESS_NONE,
+    };
+  }
+  // RPS Change Ends
+
+  } // namespace DXIL
 
 } // namespace hlsl

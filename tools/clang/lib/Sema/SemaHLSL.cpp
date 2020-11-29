@@ -11061,6 +11061,36 @@ bool ValidateAttributeTargetIsFunction(Sema& S, Decl* D, const AttributeList &A)
   return false;
 }
 
+// RPS Change Begins
+template <typename TAttr, size_t NReservedCount>
+static bool ValidateAttributeEnumRpsAccessFlags(
+    Sema &S, const AttributeList &Attr, SmallVector<typename TAttr::AccessFlags, NReservedCount>& OutAccessFlags)
+{
+  for (unsigned ArgIndex = 0; ArgIndex < Attr.getNumArgs(); ++ArgIndex) {
+    TAttr::AccessFlags AccessFlags;
+
+    StringRef StateString;
+    SourceLocation Loc;
+    if (Attr.isArgIdent(ArgIndex)) {
+      IdentifierLoc *Ident = Attr.getArgAsIdent(ArgIndex);
+      StateString = Ident->Ident->getName();
+      Loc = Ident->Loc;
+    } else {
+      if (!S.checkStringLiteralArgumentAttr(Attr, ArgIndex, StateString, &Loc))
+        return false;
+    }
+
+    if (!TAttr::ConvertStrToAccessFlags(StateString, AccessFlags)) {
+      S.Diag(Loc, diag::warn_attribute_type_not_supported)
+          << Attr.getName() << StateString;
+      return false;
+    }
+
+    OutAccessFlags.push_back(AccessFlags);
+  }
+  return true;
+}
+
 void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, bool& Handled)
 {
   DXASSERT_NOMSG(D != nullptr);
@@ -11184,16 +11214,28 @@ void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, 
         A.getRange(), S.Context, A.getAttributeSpellingListIndex());
     break;
 // RPS Change Begins
+  case AttributeList::AT_RPSResourceAccessReadOnly:
+  {
+    SmallVector<RPSResourceAccessReadOnlyAttr::AccessFlags, 8> States;
+    ValidateAttributeEnumRpsAccessFlags<RPSResourceAccessReadOnlyAttr>(S, A, States);
+    declAttr = ::new (S.Context) RPSResourceAccessReadOnlyAttr(
+        A.getRange(), S.Context, States.data(), States.size(),
+        A.getAttributeSpellingListIndex());
+  } break;
+  case AttributeList::AT_RPSResourceAccessWrite:
+  {
+    SmallVector<RPSResourceAccessWriteAttr::AccessFlags, 4> States;
+    ValidateAttributeEnumRpsAccessFlags<RPSResourceAccessWriteAttr>(S, A, States);
+    declAttr = ::new (S.Context) RPSResourceAccessWriteAttr(
+        A.getRange(), S.Context, States.data(), States.size(),
+        A.getAttributeSpellingListIndex());
+  } break;
   case AttributeList::AT_RPSRelaxedOrdering:
     declAttr = ::new (S.Context) RPSRelaxedOrderingAttr(
         A.getRange(), S.Context, A.getAttributeSpellingListIndex());
     break;
   case AttributeList::AT_RPSPersistentResource:
     declAttr = ::new (S.Context) RPSPersistentResourceAttr(
-        A.getRange(), S.Context, A.getAttributeSpellingListIndex());
-    break;
-  case AttributeList::AT_HLSLExport:
-    declAttr = ::new (S.Context) HLSLExportAttr(
         A.getRange(), S.Context, A.getAttributeSpellingListIndex());
     break;
 // RPS Change Ends
@@ -11304,6 +11346,20 @@ void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, 
   case AttributeList::AT_HLSLWaveSensitive:
     declAttr = ::new (S.Context) HLSLWaveSensitiveAttr(A.getRange(), S.Context, A.getAttributeSpellingListIndex());
     break;
+// RPS Change Begins
+  case AttributeList::AT_RPSGraphicsNode:
+    declAttr = ::new (S.Context) RPSGraphicsNodeAttr(
+        A.getRange(), S.Context, A.getAttributeSpellingListIndex());
+    break;
+  case AttributeList::AT_RPSComputeNode:
+    declAttr = ::new (S.Context) RPSComputeNodeAttr(
+        A.getRange(), S.Context, A.getAttributeSpellingListIndex());
+    break;
+  case AttributeList::AT_RPSCopyNode:
+    declAttr = ::new (S.Context) RPSCopyNodeAttr(
+        A.getRange(), S.Context, A.getAttributeSpellingListIndex());
+    break;
+// RPS Change Ends
   default:
     Handled = false;
     break;  // SPIRV Change: was return;
@@ -12685,6 +12741,19 @@ void hlsl::CustomPrintHLSLAttr(const clang::Attr *A, llvm::raw_ostream &Out, con
 
   // Begin RPS Change
 
+  case clang::attr::RPSGraphicsNode:
+    Indent(Indentation, Out);
+    Out << "graphics\n";
+    break;
+  case clang::attr::RPSComputeNode:
+    Indent(Indentation, Out);
+    Out << "compute\n";
+    break;
+  case clang::attr::RPSCopyNode:
+    Indent(Indentation, Out);
+    Out << "copy\n";
+    break;
+
   case clang::attr::RPSPersistentResource:
     Out << "persistent ";
     break;
@@ -12693,21 +12762,30 @@ void hlsl::CustomPrintHLSLAttr(const clang::Attr *A, llvm::raw_ostream &Out, con
     Out << "relaxed ";
     break;
 
-  case clang::attr::RPSResourceAccessConstantBuffer:
-    Out << "constants ";
-    break;
+  case clang::attr::RPSResourceAccessReadOnly:
+  {
+    Out << "[read";
+    Attr *noconst = const_cast<Attr *>(A);
+    auto ACast = static_cast<RPSResourceAccessReadOnlyAttr *>(noconst);
+    uint32_t accessCount = 0;
+    for (auto access : ACast->access()) {
+      Out << ((accessCount == 0) ? "( " : ", ");
+      Out << RPSResourceAccessReadOnlyAttr::ConvertAccessFlagsToStr(access);
+    }
+    Out << ((accessCount == 0) ? "]" : ")]");
+  } break;
 
-  case clang::attr::RPSResourceAccessIndirectArgs:
-    Out << "indirectargs ";
-    break;
-
-  case clang::attr::RPSResourceAccessRayTracingAS:
-    Out << "rtas ";
-    break;
-
-  case clang::attr::RPSResourceAccessReadonlyDepthStencil:
-    Out << "readonly ";
-    break;
+  case clang::attr::RPSResourceAccessWrite: {
+    Out << "[write";
+    Attr *noconst = const_cast<Attr *>(A);
+    auto ACast = static_cast<RPSResourceAccessWriteAttr *>(noconst);
+    uint32_t accessCount = 0;
+    for (auto access : ACast->access()) {
+      Out << ((accessCount == 0) ? "( " : ", ");
+      Out << RPSResourceAccessWriteAttr::ConvertAccessFlagsToStr(access);
+    }
+    Out << ((accessCount == 0) ? "]" : ")]");
+  } break;
 
   // End RPS Change
 
@@ -12781,12 +12859,13 @@ bool hlsl::IsHLSLAttr(clang::attr::Kind AttrKind) {
   case clang::attr::VKPushConstant:
   case clang::attr::VKShaderRecordNV:
   // Begin RPS Change
+  case clang::attr::RPSGraphicsNode:
+  case clang::attr::RPSComputeNode:
+  case clang::attr::RPSCopyNode:
   case clang::attr::RPSPersistentResource:
   case clang::attr::RPSRelaxedOrdering:
-  case clang::attr::RPSResourceAccessConstantBuffer:
-  case clang::attr::RPSResourceAccessIndirectArgs:
-  case clang::attr::RPSResourceAccessRayTracingAS:
-  case clang::attr::RPSResourceAccessReadonlyDepthStencil:
+  case clang::attr::RPSResourceAccessReadOnly:
+  case clang::attr::RPSResourceAccessWrite:
   // End RPS Change
     return true;
   default:

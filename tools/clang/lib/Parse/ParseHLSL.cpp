@@ -176,6 +176,8 @@ void Parser::ParseHLSLAttributeSpecifier(ParsedAttributes &attrs,
 
   // Parse attribute arguments
   if (Tok.is(tok::l_paren)) {
+    AttributeList::Kind AttrKind = AttributeList::getKind(AttrName, nullptr, AttributeList::AS_CXX11); // RPS Change
+
     if (AttrName == &this->Actions.getASTContext().Idents.get("clipplanes")) {
       ArgsVector ArgExprs;
       ConsumeParen();
@@ -203,7 +205,37 @@ void Parser::ParseHLSLAttributeSpecifier(ParsedAttributes &attrs,
       attrs.addNew(AttrName, SourceRange(AttrLoc, EndLoc), nullptr,
                    SourceLocation(), ArgExprs.data(), ArgExprs.size(),
                    AttributeList::AS_CXX11);
+
+// RPS Change Begins
+    } else if ((AttrKind == AttributeList::AT_RPSResourceAccessReadOnly) ||
+               (AttrKind == AttributeList::AT_RPSResourceAccessWrite)) {
+      ArgsVector ArgExprs;
+      ConsumeParen();
+      for (;;) {
+        if (Tok.is(tok::identifier)) {
+          AttributeList::Kind AttrKind = AttributeList::getKind(
+              AttrName, nullptr, AttributeList::AS_CXX11);
+          IdentifierLoc *IdentLoc = ParseIdentifierLoc();
+          assert(IdentLoc);
+          ArgExprs.push_back(IdentLoc);
+        }
+        // Consume a comma and process the next argument.
+        if (!Tok.is(tok::comma)) {
+          break;
+        }
+        ConsumeToken();
+      }
+
+      SourceLocation EndLoc = Tok.getLocation();
+      if (ExpectAndConsume(tok::r_paren, diag::err_expected))
+        SkipUntil(tok::r_paren);
+
+      attrs.addNew(AttrName, SourceRange(AttrLoc, EndLoc), nullptr,
+                   SourceLocation(), ArgExprs.data(), ArgExprs.size(),
+                   AttributeList::AS_CXX11);
+// RPS Change Ends
     } else {
+
       ParseGNUAttributeArgs(AttrName, AttrLoc, attrs, endLoc, nullptr,
                             SourceLocation(), AttributeList::AS_CXX11, nullptr);
     }

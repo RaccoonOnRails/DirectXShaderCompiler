@@ -80,6 +80,11 @@ struct DxilFunctionProps {
       unsigned numThreads[3];
       unsigned payloadSizeInBytes;
     } AS;
+    // RPS Change Begins
+    struct {
+      DXIL::RPS::EntryKind entryKind;
+    } RPS;
+    // RPS Change Ends
   } ShaderProps;
   DXIL::ShaderKind shaderKind;
   // TODO: Should we have an unmangled name here for ray tracing shaders?

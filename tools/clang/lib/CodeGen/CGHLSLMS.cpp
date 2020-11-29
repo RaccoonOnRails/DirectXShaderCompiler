@@ -1537,13 +1537,29 @@ void CGMSHLSLRuntime::AddHLSLFunctionInfo(Function *F, const FunctionDecl *FD) {
 
   // RPS Change Begins
   // Render Pipeline Shader
+  bool isRPSNodeDef = false;
   if (SM->IsRPS()) {
+    auto entryKind = DXIL::RPS::EntryKind::None;
     if (const HLSLExportAttr *Attr = FD->getAttr<HLSLExportAttr>()) {
-      funcProps->shaderKind = DXIL::ShaderKind::RenderPipeline;
+      entryKind = DXIL::RPS::EntryKind::ExportEntry;
       isRPS = true;
+    } else {
+      if (nullptr != FD->getAttr<RPSGraphicsNodeAttr>()) {
+        entryKind = DXIL::RPS::EntryKind::GraphicsNodeDef;
+        isRPSNodeDef = true;
+      } else if (nullptr != FD->getAttr<RPSComputeNodeAttr>()) {
+        entryKind = DXIL::RPS::EntryKind::ComputeNodeDef;
+        isRPSNodeDef = true;
+      } else if (nullptr != FD->getAttr<RPSCopyNodeAttr>()) {
+        entryKind = DXIL::RPS::EntryKind::CopyNodeDef;
+        isRPSNodeDef = true;
+      }
+    }
+    if (entryKind != DXIL::RPS::EntryKind::None) {
+      funcProps->shaderKind = DXIL::ShaderKind::RenderPipeline;
+      funcProps->ShaderProps.RPS.entryKind = entryKind;
     }
   }
-
   // RPS Change Ends
 
   const unsigned profileAttributes = isCS + isHS + isDS + isGS + isVS + isPS + isRay + isMS + isAS + isRPS; // RPS Change
@@ -1676,8 +1692,70 @@ void CGMSHLSLRuntime::AddHLSLFunctionInfo(Function *F, const FunctionDecl *FD) {
 
     
     // RPS Change Begins
-    if (parmDecl->hasAttr<RPSRelaxedOrderingAttr>())
-      paramAnnotation.SetRPSRelaxedOrdering(true);
+    uint32_t accessFlags = DXIL::RPS::RPS_RESOURCE_ACCESS_NO_FLAGS;
+    if (parmDecl->hasAttr<RPSRelaxedOrderingAttr>()) {
+      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_RELAXED_ORDER_BIT;
+    }
+    if (const RPSResourceAccessReadOnlyAttr* pROAttr = parmDecl->getAttr<RPSResourceAccessReadOnlyAttr>()) {
+      for (auto AccessFlag : pROAttr->access()) {
+        switch (AccessFlag) {
+        case RPSResourceAccessReadOnlyAttr::vs:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::ps:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_PIXEL_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::gs:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_GEOMETRY_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::hs:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_HULL_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::ds:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_DOMAIN_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::cs:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_COMPUTE_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::ts:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_TASK_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::ms:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_MESH_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::raytracing: accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_RAYTRACING_SHADER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::rtas:    accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::depth:   accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_DEPTH_READ_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::stencil: accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STENCIL_READ_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::copy:    accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_TRANSFER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::resolve: accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_RESOLVE_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::cpu:     accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_CPU_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::indirectargs: accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_INDIRECT_ARGS_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::vb:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_VERTEX_BUFFER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::ib:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_INDEX_BUFFER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::cb:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_CONSTANT_BUFFER_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::shadingrate:  accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_SHADING_RATE_BIT; break;
+        case RPSResourceAccessReadOnlyAttr::predication:  accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_PREDICATION_BIT; break;
+        }
+      }
+      // Access not specified. Allow infer access from node type later on.
+      if (pROAttr->access_size() == 0) {
+        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_READ_BIT;
+      }
+    }
+    if (const RPSResourceAccessWriteAttr* pWRAttr = parmDecl->getAttr<RPSResourceAccessWriteAttr>()) {
+      for (auto AccessFlag : pWRAttr->access()) {
+        switch (AccessFlag) {
+        case RPSResourceAccessWriteAttr::vs:        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_VERTEX_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::ps:        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_PIXEL_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::gs:        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_GEOMETRY_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::hs:        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_HULL_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::ds:        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_DOMAIN_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::cs:        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_COMPUTE_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::ts:        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_TASK_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::ms:        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_MESH_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::raytracing:accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_RAYTRACING_SHADER_BIT; break;
+        case RPSResourceAccessWriteAttr::rtas:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_BIT; break;
+        case RPSResourceAccessWriteAttr::depth:     accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_DEPTH_WRITE_BIT; break;
+        case RPSResourceAccessWriteAttr::stencil:   accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STENCIL_WRITE_BIT; break;
+        case RPSResourceAccessWriteAttr::copy:      accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_TRANSFER_BIT; break;
+        case RPSResourceAccessWriteAttr::resolve:   accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_RESOLVE_BIT; break;
+        case RPSResourceAccessWriteAttr::cpu:       accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_CPU_BIT; break;
+        case RPSResourceAccessWriteAttr::rendertarget: accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT | DXIL::RPS::RPS_RESOURCE_ACCESS_COLOR_BIT; break;
+        case RPSResourceAccessWriteAttr::streamout: accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STREAMOUT_BIT; break;
+        }
+      }
+      // Access not specified. Allow infer access from node type later on.
+      if (pWRAttr->access_size() == 0) {
+        accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_STAGE_WRITE_BIT;
+      }
+    }
+    // TODO: Validate compatible states.
+    paramAnnotation.SetRPSAccessFlags(DXIL::RPS::RpsResourceAccessFlagBits(accessFlags));
     // RPS Change Ends
 
 
@@ -2152,7 +2230,7 @@ void CGMSHLSLRuntime::AddHLSLFunctionInfo(Function *F, const FunctionDecl *FD) {
   }
 
   // Only add functionProps when exist.
-  if (isExportedEntry || isEntry)
+  if (isExportedEntry || isEntry || isRPSNodeDef) // RPS Change
     m_pHLModule->AddDxilFunctionProps(F, funcProps);
   if (isPatchConstantFunction)
     patchConstantFunctionPropsMap[F] = std::move(funcProps);

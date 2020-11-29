@@ -3809,12 +3809,12 @@ HLSLReservedKeyword:
       break;
       // HLSL Change Ends
       // RPS Change Begins
-    case tok::kw_indirectargs:
-    case tok::kw_constants:
-    case tok::kw_readonly:
-    case tok::kw_depthreadonly:
-    case tok::kw_stencilreadonly:
-    case tok::kw_rtas:
+    case tok::kw_graphics:
+    case tok::kw_compute:
+    case tok::kw_copy:
+    //case tok::kw_read:
+    //case tok::kw_write:
+    //case tok::kw_rw:
     case tok::kw_relaxed:
     case tok::kw_persistent:
       if (getLangOpts().HLSL) {
@@ -5278,6 +5278,9 @@ bool Parser::isDeclarationSpecifier(bool DisambiguatingWithExpression) {
 
   // RPS Change Starts
   case tok::kw_persistent:
+  case tok::kw_graphics:
+  case tok::kw_compute:
+  case tok::kw_copy:
     return true;
   // RPS Change Ends
 

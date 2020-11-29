@@ -94,20 +94,12 @@ void ThrowIfFailed(HRESULT hr) {
 
 static const char c_RpsHeader[] = R"(
 struct nodeidentifier { uint unused; };
-struct gfxnodeidentifier : nodeidentifier {};
 struct compnodeidentifier : nodeidentifier {};
-struct copynodeidentifier : nodeidentifier {};
 
-#define node [noinline] nodeidentifier
-#define graphics_node [noinline] gfxnodeidentifier
-#define compute_node [noinline] compnodeidentifier
-#define copy_node [noinline] copynodeidentifier
+#define node nodeidentifier
 
 RWStructuredBuffer<compnodeidentifier> __rps_asyncmarker; // Hacky way to support async 
 #define async __rps_asyncmarker[0] =
-
-// typedef void rpsexportidentifier { uint unused; };
-#define rps_export [noinline] // rpsexportidentifier // TODO: dummy return rpsexportidentifier breaks control flow atm.
 
 #define __RPS_DECL_HANDLE(X) struct X { uint _value; };
 __RPS_DECL_HANDLE(resource);
@@ -498,7 +490,6 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
 
   arguments.push_back(L"-Zi");
   arguments.push_back(L"-res_may_alias");
-  arguments.push_back(L"-Qembed_debug");
 
   arguments.push_back(L"-Qembed_debug");
 

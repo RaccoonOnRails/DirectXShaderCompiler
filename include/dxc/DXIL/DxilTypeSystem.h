@@ -83,8 +83,8 @@ public:
   void SetCBVarUsed(bool used);
 
   // RPS Change Begins
-  bool IsRPSRelaxedOrdering() const;
-  void SetRPSRelaxedOrdering(bool relaxed);
+  DXIL::RPS::RpsResourceAccessFlagBits GetRPSAccessFlags() const;
+  void SetRPSAccessFlags(DXIL::RPS::RpsResourceAccessFlagBits accessFlags);
   // RPS Change Ends
 
 private:
@@ -98,8 +98,7 @@ private:
   std::string m_FieldName;
   bool m_bCBufferVarUsed; // true if this field represents a top level variable in CB structure, and it is used.
   // RPS Change Begins
-  bool m_bRPSRelaxedOrdering;
-
+  DXIL::RPS::RpsResourceAccessFlagBits m_RpsAccessFlags;
   // RPS Change Ends
 };
 

@@ -905,26 +905,24 @@ def HLSLWaveSensitive : InheritableAttr {
 
 // RPS Change Starts
 
-def RPSResourceAccessIndirectArgs : InheritableAttr {
-  let Spellings = [CXX11<"", "indirectargs", 2015>];
+// read(rtas): BVH read
+// read(rt): Regular RT SRVs
+def RPSResourceAccessReadOnly : InheritableAttr {
+  let Spellings = [CXX11<"", "read", 2015>];
+  let Args = [VariadicEnumArgument<"Access", "AccessFlags",
+    ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "copy", "resolve", "cpu", "indirectargs", "vb", "ib", "cb", "shadingrate", "predication"],
+    ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "copy", "resolve", "cpu", "indirectargs", "vb", "ib", "cb", "shadingrate", "predication"]>];
   let Subjects = SubjectList<[ParmVar]>;
   let Documentation = [Undocumented];
 }
 
-def RPSResourceAccessConstantBuffer : InheritableAttr {
-  let Spellings = [CXX11<"", "constants", 2015>];
-  let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [Undocumented];
-}
-
-def RPSResourceAccessReadonlyDepthStencil : InheritableAttr {
-  let Spellings = [CXX11<"", "readonly", 2015>];
-  let Subjects = SubjectList<[ParmVar]>;
-  let Documentation = [Undocumented];
-}
-
-def RPSResourceAccessRayTracingAS : InheritableAttr {
-  let Spellings = [CXX11<"", "rtas", 2015>];
+// write(rtas): BVH build
+// write(rt): RT UAVs
+def RPSResourceAccessWrite : InheritableAttr {
+  let Spellings = [CXX11<"", "write", 2015>];
+  let Args = [VariadicEnumArgument<"Access", "AccessFlags",
+    ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "copy", "resolve", "cpu", "rendertarget", "streamout"],
+    ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "copy", "resolve", "cpu", "rendertarget", "streamout"]>];
   let Subjects = SubjectList<[ParmVar]>;
   let Documentation = [Undocumented];
 }
@@ -938,6 +936,24 @@ def RPSRelaxedOrdering : InheritableAttr {
 def RPSPersistentResource : InheritableAttr {
   let Spellings = [CXX11<"", "persistent", 2015>];
   let Subjects = SubjectList<[Var]>;
+  let Documentation = [Undocumented];
+}
+
+def RPSGraphicsNode : InheritableAttr {
+  let Spellings = [CXX11<"", "graphics", 2015>];
+  let Subjects = SubjectList<[Function], ErrorDiag, "ExpectedFunction">;
+  let Documentation = [Undocumented];
+}
+
+def RPSComputeNode : InheritableAttr {
+  let Spellings = [CXX11<"", "compute", 2015>];
+  let Subjects = SubjectList<[Function], ErrorDiag, "ExpectedFunction">;
+  let Documentation = [Undocumented];
+}
+
+def RPSCopyNode : InheritableAttr {
+  let Spellings = [CXX11<"", "copy", 2015>];
+  let Subjects = SubjectList<[Function], ErrorDiag, "ExpectedFunction">;
   let Documentation = [Undocumented];
 }
 

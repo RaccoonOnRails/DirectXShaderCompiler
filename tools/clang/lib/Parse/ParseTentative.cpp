@@ -1312,7 +1312,10 @@ Parser::isCXXDeclarationSpecifier(Parser::TPResult BracedCastResult,
   case tok::kw_triangle:
   case tok::kw_triangleadj:
   case tok::kw_export:
-  case tok::kw_persistent: // RPS Change
+  case tok::kw_persistent:  // RPS Change
+  case tok::kw_graphics:    // RPS Change
+  case tok::kw_compute:     // RPS Change
+  case tok::kw_copy:        // RPS Change
     return TPResult::True;
   // HLSL Change Ends
 
