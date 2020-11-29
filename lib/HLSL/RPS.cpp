@@ -315,6 +315,8 @@ struct DxilToRps : public ModulePass {
 
     llvm::SmallVector<CallInst *, 32> callInsts;
 
+    bool pendingAsyncNodeCall = false;
+
     // Go through the function,
     // replace raw node function calls with __rps_param_push / __rps_node_call
     for (auto bbIter = F.begin(); bbIter != F.end(); ++bbIter) {
@@ -332,7 +334,11 @@ struct DxilToRps : public ModulePass {
         printf("\n    Callee %s", calleeName.data());
 #endif
 
-        bool isAsyncNode = false;
+        if (DemangleNames(calleeName) == "__rps_asyncmarker") {
+          pendingAsyncNodeCall = true;
+          toRemove.insert(callInst);
+          continue;
+        }
 
         // Check if it's a node call
         auto nodeDefIdx = getNodeDefIndex(DM, calleeF);
@@ -346,12 +352,14 @@ struct DxilToRps : public ModulePass {
           // Check async compute hint
           auto &nodeDefInfo = m_RpsNodeInfos[nodeDefIdx];
 
+          bool isAsyncNode = false;
           // TODO: Handle copy separately
-          if ((nodeDefInfo.flags & RPS_COMMAND_TYPE_COMPUTE_BIT) ||
-              (nodeDefInfo.flags & RPS_COMMAND_TYPE_COPY_BIT)) {
-
-            auto argValue = argIter->get();
-            isAsyncNode = IsAsyncMarker(argValue, toRemove);
+          if (pendingAsyncNodeCall) {
+            if ((nodeDefInfo.flags & RPS_COMMAND_TYPE_COMPUTE_BIT) ||
+                (nodeDefInfo.flags & RPS_COMMAND_TYPE_COPY_BIT)) {
+              isAsyncNode = pendingAsyncNodeCall;
+            }
+            pendingAsyncNodeCall = false;
           }
 
           static const unsigned RPS_COMMAND_ASYNC_COMPUTE = 1 << 1;

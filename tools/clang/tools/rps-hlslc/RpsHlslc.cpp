@@ -94,12 +94,10 @@ void ThrowIfFailed(HRESULT hr) {
 
 static const char c_RpsHeader[] = R"(
 struct nodeidentifier { uint unused; };
-struct compnodeidentifier : nodeidentifier {};
-
 #define node nodeidentifier
 
-RWStructuredBuffer<compnodeidentifier> __rps_asyncmarker; // Hacky way to support async 
-#define async __rps_asyncmarker[0] =
+uint __rps_asyncmarker();
+#define async __rps_asyncmarker();
 
 #define __RPS_DECL_HANDLE(X) struct X { uint _value; };
 __RPS_DECL_HANDLE(resource);
