@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <functional>
 #include <wrl/client.h>
 #include <llvm/Support/Path.h>
@@ -91,6 +92,10 @@ void ThrowIfFailed(HRESULT hr) {
     throw;
   }
 }
+
+#define RPS_HEADER_NAME "__rps_builtin_header_.rpsl"
+
+static const char c_RpsHeaderIncludeString[] = "#include \"" RPS_HEADER_NAME "\"\n";
 
 static const char c_RpsHeader[] = R"(
 struct nodeidentifier { uint unused; };
@@ -384,6 +389,75 @@ inline void clear( view d, float4 val )
 }
 )";
 
+class RpsHlslcIncludeHandler : public IDxcIncludeHandler {
+private:
+  std::atomic<ULONG> m_RefCount;
+  IDxcLibrary *m_pLib;
+  std::unordered_map<std::wstring, ComPtr<IDxcBlob>> m_Buffers;
+
+public:
+  RpsHlslcIncludeHandler(IDxcLibrary *pLib) : m_RefCount(1u), m_pLib(pLib) {}
+
+  virtual HRESULT STDMETHODCALLTYPE
+  LoadSource(LPCWSTR pFilename, IDxcBlob **ppIncludeSource) override final {
+    HRESULT result = S_OK;
+
+    std::wstring fullFileName = pFilename;
+
+    size_t nConv = 0;
+    char fillFileNameA[MAX_PATH + 1];
+    wcstombs_s(&nConv, fillFileNameA, pFilename, _countof(fillFileNameA) - 1);
+
+    auto existingEntry = m_Buffers.find(fullFileName);
+    if (existingEntry != m_Buffers.end()) {
+      existingEntry->second->AddRef();
+      *ppIncludeSource = existingEntry->second.Get();
+      return result;
+    }
+
+    UINT codePage = CP_ACP;
+    ComPtr<IDxcBlobEncoding> pBlobEncoding;
+
+    auto fileNameA = llvm::sys::path::filename(fillFileNameA);
+    if (fileNameA == RPS_HEADER_NAME) {
+      result = m_pLib->CreateBlobWithEncodingFromPinned(
+          c_RpsHeader, _countof(c_RpsHeader), CP_ACP, &pBlobEncoding);
+    } else {
+      result = m_pLib->CreateBlobFromFile(pFilename, &codePage, &pBlobEncoding);
+    }
+
+    if (SUCCEEDED(result)) {
+      m_Buffers.insert(std::make_pair(fullFileName, pBlobEncoding));
+      pBlobEncoding->AddRef();
+      *ppIncludeSource = pBlobEncoding.Get();
+    }
+
+    return result;
+  }
+
+  // We are creating this on stack only, skip proper COM shenanigans for now.
+  virtual HRESULT STDMETHODCALLTYPE QueryInterface(
+      REFIID riid,
+      _COM_Outptr_ void __RPC_FAR *__RPC_FAR *ppvObject) override final {
+    if (riid == __uuidof(IDxcIncludeHandler)) {
+      *ppvObject = this;
+      return S_OK;
+    } else if (riid == __uuidof(IUnknown)) {
+      *ppvObject = this;
+      return S_OK;
+    }
+    return E_NOINTERFACE;
+  }
+
+  virtual ULONG STDMETHODCALLTYPE AddRef(void) override final {
+    return (++m_RefCount);
+  }
+
+  virtual ULONG STDMETHODCALLTYPE Release(void) override final {
+    return (--m_RefCount);
+  }
+};
+
 using ProcessPartCallback = std::function<ComPtr<IDxcBlob> (UINT32 part, const ComPtr<IDxcBlob>& pPart)>;
 
 ComPtr<IDxcBlob>
@@ -457,10 +531,10 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   fseek(fp, 0, SEEK_SET);
 
   std::vector<char> text;
-  text.resize(_countof(c_RpsHeader) + fileLen);
+  text.resize(_countof(c_RpsHeaderIncludeString) + fileLen);
 
-  memcpy(&text[0], c_RpsHeader, _countof(c_RpsHeader) - 1);
-  fread(&text[_countof(c_RpsHeader) - 1], 1, fileLen, fp);
+  memcpy(&text[0], c_RpsHeaderIncludeString, _countof(c_RpsHeaderIncludeString) - 1);
+  fread(&text[_countof(c_RpsHeaderIncludeString) - 1], 1, fileLen, fp);
   fclose(fp);
 
   ComPtr<IDxcBlobEncoding> pSource, pError;
@@ -487,6 +561,8 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
 
   arguments.push_back(L"-Qembed_debug");
 
+  RpsHlslcIncludeHandler includeHandler(pLibrary.Get());
+
   ComPtr<IDxcOperationResult> pResult;
   HRESULT hr = pCompiler->Compile(
       pSource.Get(), fileNameW, L"",
@@ -496,7 +572,8 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
       L"rps_6_0",
 #endif
       arguments.data(),
-      static_cast<UINT>(arguments.size()), nullptr, 0, nullptr, &pResult);
+      static_cast<UINT>(arguments.size()), nullptr, 0,
+      &includeHandler, &pResult);
 
   if (pResult) {
     pResult->GetErrorBuffer(&pError);
