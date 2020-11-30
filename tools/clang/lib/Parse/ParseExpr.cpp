@@ -156,6 +156,11 @@ Parser::ParseExpressionWithLeadingExtension(SourceLocation ExtLoc) {
 
 /// \brief Parse an expr that doesn't include (top-level) commas.
 ExprResult Parser::ParseAssignmentExpression(TypeCastState isTypeCast) {
+  //const SourceManager &SM = PP.getSourceManager();
+  //auto strBegin = SM.getCharacterData(Tok.getLocation());
+  //auto strEnd = SM.getCharacterData(Tok.getEndLoc());
+  //printf("\n%.20s", strBegin);
+
   if (Tok.is(tok::code_completion)) {
     Actions.CodeCompleteOrdinaryName(getCurScope(), Sema::PCC_Expression);
     cutOffParsing();

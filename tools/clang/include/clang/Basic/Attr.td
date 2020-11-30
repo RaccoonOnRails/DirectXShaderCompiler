@@ -905,10 +905,10 @@ def HLSLWaveSensitive : InheritableAttr {
 
 // RPS Change Starts
 
-// read(rtas): BVH read
-// read(rt): Regular RT SRVs
+// rtas: BVH
+// rt: Regular RT SRV/UAVs
 def RPSResourceAccessReadOnly : InheritableAttr {
-  let Spellings = [CXX11<"", "read", 2015>];
+  let Spellings = [CXX11<"", "readonly", 2015>];
   let Args = [VariadicEnumArgument<"Access", "AccessFlags",
     ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "copy", "resolve", "cpu", "indirectargs", "vb", "ib", "cb", "shadingrate", "predication"],
     ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "copy", "resolve", "cpu", "indirectargs", "vb", "ib", "cb", "shadingrate", "predication"]>];
@@ -916,13 +916,20 @@ def RPSResourceAccessReadOnly : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-// write(rtas): BVH build
-// write(rt): RT UAVs
-def RPSResourceAccessWrite : InheritableAttr {
-  let Spellings = [CXX11<"", "write", 2015>];
+def RPSResourceAccessWriteOnly : InheritableAttr {
+  let Spellings = [CXX11<"", "writeonly", 2015>];
   let Args = [VariadicEnumArgument<"Access", "AccessFlags",
     ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "copy", "resolve", "cpu", "rendertarget", "streamout"],
     ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "copy", "resolve", "cpu", "rendertarget", "streamout"]>];
+  let Subjects = SubjectList<[ParmVar]>;
+  let Documentation = [Undocumented];
+}
+
+def RPSResourceAccessReadWrite : InheritableAttr {
+  let Spellings = [CXX11<"", "readwrite", 2015>];
+  let Args = [VariadicEnumArgument<"Access", "AccessFlags",
+    ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "rendertarget"],
+    ["vs", "ps", "gs", "hs", "ds", "cs", "ts", "ms", "raytracing", "rtas", "depth", "stencil", "rendertarget"]>];
   let Subjects = SubjectList<[ParmVar]>;
   let Documentation = [Undocumented];
 }

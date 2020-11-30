@@ -208,13 +208,12 @@ void Parser::ParseHLSLAttributeSpecifier(ParsedAttributes &attrs,
 
 // RPS Change Begins
     } else if ((AttrKind == AttributeList::AT_RPSResourceAccessReadOnly) ||
-               (AttrKind == AttributeList::AT_RPSResourceAccessWrite)) {
+               (AttrKind == AttributeList::AT_RPSResourceAccessWriteOnly) ||
+               (AttrKind == AttributeList::AT_RPSResourceAccessReadWrite)) {
       ArgsVector ArgExprs;
       ConsumeParen();
       for (;;) {
         if (Tok.is(tok::identifier)) {
-          AttributeList::Kind AttrKind = AttributeList::getKind(
-              AttrName, nullptr, AttributeList::AS_CXX11);
           IdentifierLoc *IdentLoc = ParseIdentifierLoc();
           assert(IdentLoc);
           ArgExprs.push_back(IdentLoc);

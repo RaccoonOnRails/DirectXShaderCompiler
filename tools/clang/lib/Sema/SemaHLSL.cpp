@@ -8686,6 +8686,23 @@ void HLSLExternalSource::CheckBinOpForHLSL(
       }
       RHS = m_sema->PerformImplicitConversion(RHS.get(), ResultTy, 
         standard, Sema::AA_Converting, Sema::CCK_ImplicitConversion);
+      // RPS Change Begins
+
+      if (ResultTy->getTypeClass() == clang::Type::TypeClass::Record) {
+        auto ResultTyDecl = ResultTy->getAsCXXRecordDecl();
+        if (ResultTyDecl->getName() == "resource") {
+          // TODO: Build a comma expression to setup resource name. Probably should make resource a keyword.
+          auto LHSStmtClass = LHS.get()->getStmtClass();
+          if (LHSStmtClass == Stmt::StmtClass::DeclRefExprClass) {
+            const DeclRefExpr *DeclRef = LHS.getAs<DeclRefExpr>();
+            if (DeclRef && DeclRef->getDecl()) {
+              //printf("\n>>> %s", DeclRef->getDecl()->getIdentifier()->getName().str().c_str());
+            }
+          }
+        }
+      }
+
+      // RPS Change Ends
       return;
     }
     break;
@@ -11222,11 +11239,18 @@ void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, 
         A.getRange(), S.Context, States.data(), States.size(),
         A.getAttributeSpellingListIndex());
   } break;
-  case AttributeList::AT_RPSResourceAccessWrite:
+  case AttributeList::AT_RPSResourceAccessWriteOnly:
   {
-    SmallVector<RPSResourceAccessWriteAttr::AccessFlags, 4> States;
-    ValidateAttributeEnumRpsAccessFlags<RPSResourceAccessWriteAttr>(S, A, States);
-    declAttr = ::new (S.Context) RPSResourceAccessWriteAttr(
+    SmallVector<RPSResourceAccessWriteOnlyAttr::AccessFlags, 4> States;
+    ValidateAttributeEnumRpsAccessFlags<RPSResourceAccessWriteOnlyAttr>(S, A, States);
+    declAttr = ::new (S.Context) RPSResourceAccessWriteOnlyAttr(
+        A.getRange(), S.Context, States.data(), States.size(),
+        A.getAttributeSpellingListIndex());
+  } break;
+  case AttributeList::AT_RPSResourceAccessReadWrite: {
+    SmallVector<RPSResourceAccessReadWriteAttr::AccessFlags, 4> States;
+    ValidateAttributeEnumRpsAccessFlags<RPSResourceAccessReadWriteAttr>(S, A, States);
+    declAttr = ::new (S.Context) RPSResourceAccessReadWriteAttr(
         A.getRange(), S.Context, States.data(), States.size(),
         A.getAttributeSpellingListIndex());
   } break;
@@ -12751,12 +12775,12 @@ void hlsl::CustomPrintHLSLAttr(const clang::Attr *A, llvm::raw_ostream &Out, con
     break;
 
   case clang::attr::RPSRelaxedOrdering:
-    Out << "relaxed ";
+    Out << "[relaxed]\n";
     break;
 
   case clang::attr::RPSResourceAccessReadOnly:
   {
-    Out << "[read";
+    Out << "[readonly";
     Attr *noconst = const_cast<Attr *>(A);
     auto ACast = static_cast<RPSResourceAccessReadOnlyAttr *>(noconst);
     uint32_t accessCount = 0;
@@ -12764,17 +12788,29 @@ void hlsl::CustomPrintHLSLAttr(const clang::Attr *A, llvm::raw_ostream &Out, con
       Out << ((accessCount == 0) ? "( " : ", ");
       Out << RPSResourceAccessReadOnlyAttr::ConvertAccessFlagsToStr(access);
     }
-    Out << ((accessCount == 0) ? "]" : ")]");
+    Out << ((accessCount == 0) ? "]" : ")]\n");
   } break;
 
-  case clang::attr::RPSResourceAccessWrite: {
-    Out << "[write";
+  case clang::attr::RPSResourceAccessWriteOnly: {
+    Out << "[writeonly";
     Attr *noconst = const_cast<Attr *>(A);
-    auto ACast = static_cast<RPSResourceAccessWriteAttr *>(noconst);
+    auto ACast = static_cast<RPSResourceAccessWriteOnlyAttr *>(noconst);
     uint32_t accessCount = 0;
     for (auto access : ACast->access()) {
       Out << ((accessCount == 0) ? "( " : ", ");
-      Out << RPSResourceAccessWriteAttr::ConvertAccessFlagsToStr(access);
+      Out << RPSResourceAccessWriteOnlyAttr::ConvertAccessFlagsToStr(access);
+    }
+    Out << ((accessCount == 0) ? "]" : ")]\n");
+  } break;
+
+  case clang::attr::RPSResourceAccessReadWrite: {
+    Out << "[readwrite";
+    Attr *noconst = const_cast<Attr *>(A);
+    auto ACast = static_cast<RPSResourceAccessReadWriteAttr *>(noconst);
+    uint32_t accessCount = 0;
+    for (auto access : ACast->access()) {
+      Out << ((accessCount == 0) ? "( " : ", ");
+      Out << RPSResourceAccessReadWriteAttr::ConvertAccessFlagsToStr(access);
     }
     Out << ((accessCount == 0) ? "]" : ")]");
   } break;
@@ -12856,7 +12892,8 @@ bool hlsl::IsHLSLAttr(clang::attr::Kind AttrKind) {
   case clang::attr::RPSCopyNode:
   case clang::attr::RPSRelaxedOrdering:
   case clang::attr::RPSResourceAccessReadOnly:
-  case clang::attr::RPSResourceAccessWrite:
+  case clang::attr::RPSResourceAccessWriteOnly:
+  case clang::attr::RPSResourceAccessReadWrite:
   // End RPS Change
     return true;
   default:

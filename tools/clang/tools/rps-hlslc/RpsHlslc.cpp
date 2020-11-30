@@ -102,10 +102,14 @@ uint __rps_asyncmarker();
 #define __RPS_DECL_HANDLE(X) struct X { uint _value; };
 __RPS_DECL_HANDLE(resource);
 __RPS_DECL_HANDLE(view);
-__RPS_DECL_HANDLE(rtv);
-__RPS_DECL_HANDLE(dsv);
-__RPS_DECL_HANDLE(srv);
-__RPS_DECL_HANDLE(uav);
+
+// Syntax sugars
+#define rtv         [readwrite(rendertarget)] view
+#define discard_rtv [writeonly(rendertarget)] view
+#define srv         [readonly(ps, cs)] view
+#define ps_srv      [readonly(ps)] view
+#define dsv         [readwrite(depth, stencil)] view
+#define uav         [readwrite(ps, cs)] view
 
 #define __RPS_BEGIN_DECL_ENUM(X) namespace rps { enum class X {
 #define __RPS_ENUM_VALUE(N, V) N = (V),
@@ -113,9 +117,9 @@ __RPS_DECL_HANDLE(uav);
 
 __RPS_BEGIN_DECL_ENUM(resource_type)
     __RPS_ENUM_VALUE(buffer, 0)
-    __RPS_ENUM_VALUE(tex1d, 1)
-    __RPS_ENUM_VALUE(tex2d, 2)
-    __RPS_ENUM_VALUE(tex3d, 3)
+    __RPS_ENUM_VALUE(tex1d,  1)
+    __RPS_ENUM_VALUE(tex2d,  2)
+    __RPS_ENUM_VALUE(tex3d,  3)
 __RPS_END_DECL_ENUM()
 
 __RPS_BEGIN_DECL_ENUM(resource_flags)
@@ -221,27 +225,6 @@ __RPS_BEGIN_DECL_ENUM(format)
     __RPS_ENUM_VALUE(b8g8r8x8_unorm_srgb      , 93)
 __RPS_END_DECL_ENUM()
 
-__RPS_BEGIN_DECL_ENUM(access)
-    __RPS_ENUM_VALUE(common          , 1 << 0)
-    __RPS_ENUM_VALUE(vertex_and_constant_buffer , 1 << 1)
-    __RPS_ENUM_VALUE(index_buffer    , 1 << 2)
-    __RPS_ENUM_VALUE(render_target   , 1 << 3)
-    __RPS_ENUM_VALUE(unordered_access , 1 << 4)
-    __RPS_ENUM_VALUE(depth_write     , 1 << 5)
-    __RPS_ENUM_VALUE(depth_read      , 1 << 6)
-    __RPS_ENUM_VALUE(non_ps_resource , 1 << 7)
-    __RPS_ENUM_VALUE(ps_resource     , 1 << 8)
-    __RPS_ENUM_VALUE(stream_out      , 1 << 9)
-    __RPS_ENUM_VALUE(indirect_args   , 1 << 10)
-    __RPS_ENUM_VALUE(copy_dest       , 1 << 11)
-    __RPS_ENUM_VALUE(copy_source     , 1 << 12)
-    __RPS_ENUM_VALUE(resolve_dest    , 1 << 13)
-    __RPS_ENUM_VALUE(resolve_source  , 1 << 14)
-    __RPS_ENUM_VALUE(raytracing_acceleration_structure, 1 << 15)
-    __RPS_ENUM_VALUE(shading_rate_source , 1 << 16)
-    __RPS_ENUM_VALUE(unknown         , 1 << 31)
-__RPS_END_DECL_ENUM()
-
 __RPS_BEGIN_DECL_ENUM(clear)
     __RPS_ENUM_VALUE(color    , 1 << 0)
     __RPS_ENUM_VALUE(depth    , 1 << 1)
@@ -293,11 +276,11 @@ struct ResourceViewDesc
     BufferRange BufferView;
 };
 
-ResourceDesc describe_resource( resource r );
-ResourceViewDesc describe_view( view v );
-resource create_resource( ResourceDesc desc );
-view create_view( resource r, ResourceViewDesc desc );
-void clear_view( view v, rps::clear option, uint4 data );
+ResourceDesc     describe_resource( resource r );
+ResourceViewDesc describe_view    ( view v );
+resource         create_resource  ( ResourceDesc desc );
+view             create_view      ( resource r, ResourceViewDesc desc );
+void             clear_view       ( view v, rps::clear option, uint4 data );
 
 inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, rps::format format, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0, rps::resource_flags flags = rps::resource_flags::none )
 {

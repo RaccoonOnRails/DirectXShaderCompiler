@@ -525,7 +525,6 @@ ALIAS("technique11", technique      , KEYHLSL)
 KEYWORD(graphics                    , KEYHLSL)
 KEYWORD(compute                     , KEYHLSL)
 KEYWORD(copy                        , KEYHLSL)
-KEYWORD(relaxed                     , KEYHLSL)
 
 // OpenCL address space qualifiers
 KEYWORD(__global                    , KEYOPENCL)

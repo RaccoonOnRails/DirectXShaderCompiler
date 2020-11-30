@@ -2612,6 +2612,24 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
 
       ExprResult Init(ParseInitializer());
 
+      // RPS Change Begin.
+      if (getLangOpts().HLSL) {
+        if (ValueDecl *ThisValueDecl = dyn_cast<ValueDecl>(ThisDecl)) {
+          auto ThisDeclType = ThisValueDecl->getType().getUnqualifiedType();
+          if (!ThisDeclType.isNull() &&
+              ThisDeclType->getTypeClass() == clang::Type::TypeClass::Record) {
+            auto ResultTyDecl = ThisDeclType->getAsCXXRecordDecl();
+            if (ResultTyDecl->getName() == "resource") {
+              if (auto *DIdent = D.getIdentifier()) {
+                // printf("\n>>> %s", DIdent->getName().str().c_str());
+                // TODO: Insert resource name
+              }
+            }
+          }
+        }
+      }
+      // RPS Change End.
+
       // If this is the only decl in (possibly) range based for statement,
       // our best guess is that the user meant ':' instead of '='.
       if (Tok.is(tok::r_paren) && FRI && D.isFirstDeclarator()) {
@@ -3812,10 +3830,6 @@ HLSLReservedKeyword:
     case tok::kw_graphics:
     case tok::kw_compute:
     case tok::kw_copy:
-    //case tok::kw_read:
-    //case tok::kw_write:
-    //case tok::kw_rw:
-    case tok::kw_relaxed:
       if (getLangOpts().HLSL) {
         if (DS.getTypeSpecType() != DeclSpec::TST_unspecified) {
           PrevSpec = "";
