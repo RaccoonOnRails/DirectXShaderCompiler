@@ -282,7 +282,7 @@ resource         create_resource  ( ResourceDesc desc );
 view             create_view      ( resource r, ResourceViewDesc desc );
 void             clear_view       ( view v, rps::clear option, uint4 data );
 
-inline resource create_tex2d( uint width, uint height, uint arraySlices, uint numMips, rps::format format, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0, rps::resource_flags flags = rps::resource_flags::none )
+inline resource create_tex2d( rps::format format, uint width, uint height, uint numMips = 1, uint arraySlices = 1, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0, rps::resource_flags flags = rps::resource_flags::none )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resource_type::tex2d;
@@ -299,7 +299,7 @@ inline resource create_tex2d( uint width, uint height, uint arraySlices, uint nu
     return create_resource(desc);
 }
 
-inline resource create_tex3d( uint width, uint height, uint depth, uint numMips, rps::format format, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
+inline resource create_tex3d( rps::format format, uint width, uint height, uint depth, uint numMips = 1, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resource_type::tex2d;
@@ -358,7 +358,7 @@ inline BufferRange make_buffer_range( uint64_t offset, uint64_t sizeInBytes = 0,
     return range;
 }
 
-inline view create_texture_view( resource r, uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0, rps::format format = rps::format::unknown )
+inline view create_texture_view( resource r, uint baseMip = 0, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0, rps::format format = rps::format::unknown )
 {
     ResourceViewDesc desc;
     desc.Format = format;
@@ -368,7 +368,7 @@ inline view create_texture_view( resource r, uint baseMip, uint mipLevels = 1, u
     return create_view( r, desc );
 }
 
-inline view create_buffer_view( resource r, uint64_t offset, uint64_t sizeInBytes = 0, uint temporalLayer = 0, rps::format format = rps::format::unknown )
+inline view create_buffer_view( resource r, uint64_t offset = 0, uint64_t sizeInBytes = 0, uint temporalLayer = 0, rps::format format = rps::format::unknown )
 {
     ResourceViewDesc desc;
     desc.Format = format;
@@ -514,6 +514,7 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   }
 
   if (FAILED(hr)) {
+    printf("Failed to compile '%s'", fileName);
     return nullptr;
   }
 
@@ -653,6 +654,8 @@ void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC, const char* tmpFileName) {
 }
 
 int main(const int argc, const char *argv[]) {
+  int result = 0;
+
   // Parse command line options.
   cl::ParseCommandLineOptions(argc, argv, "dxil assembly\n");
 
@@ -682,6 +685,10 @@ int main(const int argc, const char *argv[]) {
   LoadDxc();
 
   auto pCode = CompileHlslToDxilContainer(InputFilename.c_str());
+  if (!pCode) {
+    result = -1;
+    return result;
+  }
 
 #if RPS_AS_SECONDARY_OPT_PASS
   pCode = ConvertDxilToRps(pCode);
@@ -690,8 +697,6 @@ int main(const int argc, const char *argv[]) {
   auto tmpRpsLLFile = OutputDirectory + "/" + OutputFileStem + ".tmp.rps.ll";
 
   DisassembleRps(pCode, tmpRpsLLFile.c_str());
-
-  int result = 0;
 
 #if 0 // TODO : non-cbe code generators
   if (OutputObj.getValue()) {
