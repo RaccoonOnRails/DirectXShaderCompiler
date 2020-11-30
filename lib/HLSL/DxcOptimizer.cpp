@@ -1,5 +1,3 @@
-// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
-
 ///////////////////////////////////////////////////////////////////////////////
 //                                                                           //
 // DxcOptimizer.cpp                                                          //
@@ -685,26 +683,6 @@ HRESULT STDMETHODCALLTYPE DxcOptimizer::RunOptimizer(
         AnalyzeOnly = true;
         handled.push_back(i);
         continue;
-      }
-    }
-
-    // Add module name for RPS code gen
-    for (UINT32 i = 0; i < optionCount; ++i) {
-      if (wcseq(L"-module-name", ppOptions[i]) &&
-          ((i + 1) != optionCount) &&
-          (ppOptions[i + 1] != nullptr)) {
-        size_t nc;
-        wcstombs_s(&nc, nullptr, 0, ppOptions[i + 1], 0);
-
-        llvm::SmallVector<char, 128> nameMbs;
-        nameMbs.resize(nc + 1);
-
-        wcstombs_s(&nc, nameMbs.data(), nc, ppOptions[i + 1], nc);
-        M->setModuleIdentifier(nameMbs.data());
-
-        handled.push_back(i);
-        handled.push_back(i + 1);
-        break;
       }
     }
 

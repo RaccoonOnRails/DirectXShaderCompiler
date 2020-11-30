@@ -16,8 +16,6 @@
 
 #define RPS_ENABLE_DEBUG_INFO 1
 
-#define RPS_AS_SECONDARY_OPT_PASS 0
-
 using namespace llvm;
 
 static cl::opt<std::string> InputFilename(cl::Positional,
@@ -458,62 +456,6 @@ public:
   }
 };
 
-using ProcessPartCallback = std::function<ComPtr<IDxcBlob> (UINT32 part, const ComPtr<IDxcBlob>& pPart)>;
-
-ComPtr<IDxcBlob>
-ProcessContainerParts(const ComPtr<IDxcBlob> &pOriginalContainer,
-                      ProcessPartCallback processPartCb) {
-  ComPtr<IDxcContainerReflection> pRefl;
-  g_pfnDxcCreateInstance(CLSID_DxcContainerReflection, IID_PPV_ARGS(&pRefl));
-
-// This is for including debug info, but llvm-cbe doesn't work with this
-// for now because subprogram changes in the llvm version differences.
-#if RPS_ENABLE_DEBUG_INFO
-  ComPtr<IDxcContainerBuilder> pRebuilder;
-  g_pfnDxcCreateInstance(CLSID_DxcContainerBuilder, IID_PPV_ARGS(&pRebuilder));
-#endif
-
-  ThrowIfFailed(pRefl->Load(pOriginalContainer.Get()));
-
-  UINT numParts = 0;
-
-  if (SUCCEEDED(pRefl->GetPartCount(&numParts))) {
-
-    for (UINT iPart = 0; iPart < numParts; iPart++) {
-      ComPtr<IDxcBlob> pPartContent;
-      if (FAILED(pRefl->GetPartContent(iPart, &pPartContent))) {
-        break;
-      }
-
-      UINT32 partKind = 0;
-      pRefl->GetPartKind(iPart, &partKind);
-
-#if 0
-      printf("\nProcessing part %c%c%c%c", partKind & 0xff,
-             (partKind >> 8) & 0xff, (partKind >> 16) & 0xff,
-             (partKind >> 24) & 0xff); //'LIXD'
-#endif
-
-      auto pProcessedPart = processPartCb(partKind, pPartContent);
-
-#if RPS_ENABLE_DEBUG_INFO
-      if (FAILED(pRebuilder->AddPart(partKind, pProcessedPart.Get()))) {
-        break;
-      }
-#endif
-    }
-  }
-
-  ComPtr<IDxcBlob> pNewContainer = pOriginalContainer;
-#if RPS_ENABLE_DEBUG_INFO
-  ComPtr<IDxcOperationResult> pBuildResult;
-  if (SUCCEEDED(pRebuilder->SerializeContainer(&pBuildResult))) {
-    pBuildResult->GetResult(&pNewContainer);
-  }
-#endif
-  return pNewContainer;
-}
-
 ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   ComPtr<IDxcLibrary> pLibrary;
   ThrowIfFailed(
@@ -566,11 +508,7 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   ComPtr<IDxcOperationResult> pResult;
   HRESULT hr = pCompiler->Compile(
       pSource.Get(), fileNameW, L"",
-#if RPS_AS_SECONDARY_OPT_PASS
-      L"lib_6_3"
-#else
       L"rps_6_0",
-#endif
       arguments.data(),
       static_cast<UINT>(arguments.size()), nullptr, 0,
       &includeHandler, &pResult);
@@ -625,94 +563,6 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   return pContainer;
 }
 
-#if RPS_AS_SECONDARY_OPT_PASS
-ComPtr<IDxcBlob> ConvertDxilToRps(const ComPtr<IDxcBlob> &pContainer) {
-  ComPtr<IDxcOptimizer> pOptimizer;
-  ThrowIfFailed(
-      g_pfnDxcCreateInstance(CLSID_DxcOptimizer, IID_PPV_ARGS(&pOptimizer)));
-
-  UINT32 passCnt = 0;
-  ThrowIfFailed(pOptimizer->GetAvailablePassCount(&passCnt));
-
-  bool bFoundRpsPass = false;
-  for (UINT32 i = 0; i < passCnt; i++) {
-    ComPtr<IDxcOptimizerPass> pPass;
-    ThrowIfFailed(pOptimizer->GetAvailablePass(i, &pPass));
-
-    LPWSTR name;
-    pPass->GetOptionName(&name);
-
-#if 0
-    printf("\nFound optimization pass: %S", name);
-#endif
-
-    if (0 == wcscmp(name, L"dxil-2-rps")) {
-      bFoundRpsPass = true;
-      break;
-    }
-  }
-
-  printf("%s dxil-2-rps pass.", bFoundRpsPass ? "Found" : "Didn't find");
-
-  ComPtr<IDxcBlob> pOutContianer;
-
-  if (bFoundRpsPass) {
-    std::vector<LPCWSTR> arguments;
-    arguments.push_back(L"-dxil-2-rps");
-
-    if (OutputModuleName != "-") {
-      arguments.push_back(L"-module-name");
-
-      wchar_t stemW[MAX_PATH];
-
-      size_t nConv = 0;
-      mbstowcs_s(&nConv, stemW, OutputModuleName.c_str(), _countof(stemW) - 1);
-      arguments.push_back(stemW);
-    }
-
-    auto processDxil = ProcessPartCallback(
-        [&](UINT32 partKind,
-            const ComPtr<IDxcBlob> &pPart) -> ComPtr<IDxcBlob> {
-          ComPtr<IDxcBlob> pOutPart = pPart;
-          ComPtr<IDxcBlobEncoding> pOutText;
-          if ((partKind == 'BDLI')) { // || (partKind == 'LIXD')
-            ThrowIfFailed(pOptimizer->RunOptimizer(
-                pPart.Get(), arguments.data(), arguments.size(), &pOutPart,
-                &pOutText));
-
-            pOutContianer = pOutPart;
-
-            if (pOutText) {
-              char *outTextBuf = (char *)pOutText->GetBufferPointer();
-              if (outTextBuf) {
-                printf("\n%s", outTextBuf);
-              }
-            }
-          }
-          return pOutPart;
-        });
-
-    auto pProcessedContainer = ProcessContainerParts(pContainer, processDxil);
-
-#if 0 && RPS_ENABLE_DEBUG_INFO
-    pOutContianer = pProcessedContainer;
-#endif
-
-    if (DumpRpsILBin.getValue()) {
-      FILE *fp = {};
-      fopen_s(&fp, (OutputFileDirectoryAndStem + ".rps.blob").c_str(), "wb");
-      if (fp) {
-        fwrite(pOutContianer->GetBufferPointer(), 1,
-               pOutContianer->GetBufferSize(), fp);
-        fclose(fp);
-      }
-    }
-  }
-
-  return pOutContianer;
-}
-#endif
-
 void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC, const char* tmpFileName) {
   ComPtr<IDxcCompiler> pCompiler;
 
@@ -766,10 +616,6 @@ int main(const int argc, const char *argv[]) {
     result = -1;
     return result;
   }
-
-#if RPS_AS_SECONDARY_OPT_PASS
-  pCode = ConvertDxilToRps(pCode);
-#endif
 
   auto tmpRpsLLFile = OutputDirectory + "/" + OutputFileStem + ".tmp.rps.ll";
 

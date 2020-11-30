@@ -1,5 +1,3 @@
-// Modifications Copyright (C) 2020 Advanced Micro Devices, Inc.
-
 ///////////////////////////////////////////////////////////////////////////////
 //                                                                           //
 // dxcontainerbuilder.cpp                                                    //
@@ -101,13 +99,11 @@ HRESULT STDMETHODCALLTYPE DxcContainerBuilder::AddPart(_In_ UINT32 fourCC, _In_ 
       pSource->GetBufferSize()),
       E_INVALIDARG);
     // Only allow adding private data, debug info name and root signature for now
-#if RPS_CBE_UNHACK    
     IFTBOOL(
         fourCC == DxilFourCC::DFCC_RootSignature || 
         fourCC == DxilFourCC::DFCC_ShaderDebugName ||
         fourCC == DxilFourCC::DFCC_PrivateData, 
       E_INVALIDARG);
-#endif
     PartList::iterator it = std::find_if(m_parts.begin(), m_parts.end(), [&](DxilPart part) {
       return part.m_fourCC == fourCC;
     });
