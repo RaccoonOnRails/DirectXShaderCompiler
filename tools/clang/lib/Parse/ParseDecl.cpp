@@ -2613,19 +2613,9 @@ Decl *Parser::ParseDeclarationAfterDeclaratorAndAttributes(
       ExprResult Init(ParseInitializer());
 
       // RPS Change Begin.
-      if (getLangOpts().HLSL) {
+      if (getLangOpts().HLSL && !Init.isInvalid()) {
         if (ValueDecl *ThisValueDecl = dyn_cast<ValueDecl>(ThisDecl)) {
-          auto ThisDeclType = ThisValueDecl->getType().getUnqualifiedType();
-          if (!ThisDeclType.isNull() &&
-              ThisDeclType->getTypeClass() == clang::Type::TypeClass::Record) {
-            auto ResultTyDecl = ThisDeclType->getAsCXXRecordDecl();
-            if (ResultTyDecl->getName() == "resource") {
-              if (auto *DIdent = D.getIdentifier()) {
-                // printf("\n>>> %s", DIdent->getName().str().c_str());
-                // TODO: Insert resource name
-              }
-            }
-          }
+          Init = Actions.AddRPSSetResourceNameCall(ThisValueDecl, Init.get());
         }
       }
       // RPS Change End.

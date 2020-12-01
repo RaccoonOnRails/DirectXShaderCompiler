@@ -15,6 +15,7 @@
 #include <llvm/Support/CommandLine.h>
 
 #define RPS_ENABLE_DEBUG_INFO 1
+#define RPS_DEBUG_AST_DUMP 0
 
 using namespace llvm;
 
@@ -105,6 +106,8 @@ uint __rps_asyncmarker();
 #define __RPS_DECL_HANDLE(X) struct X { uint _value; };
 __RPS_DECL_HANDLE(resource);
 __RPS_DECL_HANDLE(view);
+
+resource __rps_set_resource_name(resource r, uint nameOffset, uint nameLength);
 
 // Syntax sugars
 #define rtv         [readwrite(rendertarget)] view
@@ -503,6 +506,10 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
 
   arguments.push_back(L"-Qembed_debug");
 
+#if RPS_DEBUG_AST_DUMP
+  arguments.push_back(L"-ast-dump");
+#endif //RPS_DEBUG_AST_DUMP
+
   RpsHlslcIncludeHandler includeHandler(pLibrary.Get());
 
   ComPtr<IDxcOperationResult> pResult;
@@ -537,6 +544,17 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   pResult->GetResult(&pContainer);
 
   if (pContainer) {
+
+#if RPS_DEBUG_AST_DUMP
+    fp = {};
+    fopen_s(&fp, (std::string(fileName) + ".ast.txt").c_str(), "wb");
+    if (fp) {
+      fwrite(pContainer->GetBufferPointer(), 1, pContainer->GetBufferSize(), fp);
+    }
+    fclose(fp);
+    return nullptr;
+#endif // RPS_DEBUG_AST_DUMP
+
     ComPtr<IDxcBlobEncoding> pDisasm;
     ThrowIfFailed(pCompiler->Disassemble(pContainer.Get(), &pDisasm));
 

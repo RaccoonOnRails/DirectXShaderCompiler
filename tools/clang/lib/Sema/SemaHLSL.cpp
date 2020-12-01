@@ -22,6 +22,7 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/AST/HlslTypes.h"
+#include "clang/Lex/PreProcessor.h" // RPS Change
 #include "clang/Sema/Overload.h"
 #include "clang/Sema/SemaDiagnostic.h"
 #include "clang/Sema/Initialization.h"
@@ -8686,22 +8687,20 @@ void HLSLExternalSource::CheckBinOpForHLSL(
       }
       RHS = m_sema->PerformImplicitConversion(RHS.get(), ResultTy, 
         standard, Sema::AA_Converting, Sema::CCK_ImplicitConversion);
-      // RPS Change Begins
 
+      // RPS Change Begins
       if (ResultTy->getTypeClass() == clang::Type::TypeClass::Record) {
-        auto ResultTyDecl = ResultTy->getAsCXXRecordDecl();
-        if (ResultTyDecl->getName() == "resource") {
-          // TODO: Build a comma expression to setup resource name. Probably should make resource a keyword.
-          auto LHSStmtClass = LHS.get()->getStmtClass();
-          if (LHSStmtClass == Stmt::StmtClass::DeclRefExprClass) {
-            const DeclRefExpr *DeclRef = LHS.getAs<DeclRefExpr>();
-            if (DeclRef && DeclRef->getDecl()) {
-              //printf("\n>>> %s", DeclRef->getDecl()->getIdentifier()->getName().str().c_str());
-            }
+        // TODO: Build a call to setup resource name. Probably should make
+        // resource a keyword.
+        auto LHSStmtClass = LHS.get()->getStmtClass();
+        if (LHSStmtClass == Stmt::StmtClass::DeclRefExprClass) {
+          const DeclRefExpr *DeclRef = LHS.getAs<DeclRefExpr>();
+          if (DeclRef && DeclRef->getDecl()) {
+            RHS = m_sema->AddRPSSetResourceNameCall(DeclRef->getDecl(),
+                                                    RHS.get());
           }
         }
       }
-
       // RPS Change Ends
       return;
     }
@@ -11107,6 +11106,67 @@ static bool ValidateAttributeEnumRpsAccessFlags(
   }
   return true;
 }
+
+ExprResult Sema::AddRPSSetResourceNameCall(const ValueDecl *ValueDecl,
+                                           Expr *Initializer) {
+  ExprResult Result(Initializer);
+
+  QualType ThisDeclType = ValueDecl->getType().getUnqualifiedType();
+  const IdentifierInfo *DIdent = ValueDecl->getIdentifier();
+
+  if ((Initializer->getStmtClass() == Stmt::CallExprClass) &&
+      !ThisDeclType.isNull() &&
+      ThisDeclType->getTypeClass() == clang::Type::TypeClass::Record) {
+
+    const IdentifierInfo *ResourceRecIdent = PP.getIdentifierInfo("resource");
+
+    auto ResultTyDecl = ThisDeclType->getAsCXXRecordDecl();
+
+    auto ResultTyIdent = ResultTyDecl->getIdentifier();
+
+    if (ResultTyDecl->getName() == "resource") {
+
+      StringRef DIdentName = DIdent->getName();
+
+      CXXScopeSpec SS;
+      UnqualifiedId Name;
+      Name.setIdentifier(PP.getIdentifierInfo("__rps_set_resource_name"),
+                         SourceLocation());
+      ExprResult SetResNameFnExpr = ActOnIdExpression(
+          getCurScope(), SS, SourceLocation(), Name, true, false);
+
+      if (!SetResNameFnExpr.isInvalid()) {
+        uint32_t nameBegin = Context.RPSResourceNames.length();
+        Context.RPSResourceNames += DIdentName.str() + ";";
+
+        Expr *SetResNameArgExprs[3];
+        SetResNameArgExprs[0] = Initializer;
+        Expr *StrOffsetLiteral = IntegerLiteral::Create(
+            getASTContext(), llvm::APInt(32, nameBegin),
+            getASTContext().getIntTypeForBitwidth(32, 0), SourceLocation());
+        Expr *StrLengthLiteral = IntegerLiteral::Create(
+            Context, llvm::APInt(32, DIdentName.size()),
+            Context.getIntTypeForBitwidth(32, 0), SourceLocation());
+
+        SetResNameArgExprs[1] = ImplicitCastExpr::Create(
+            Context, Context.getIntTypeForBitwidth(32, 0), CK_IntegralCast,
+            StrOffsetLiteral, nullptr, VK_RValue);
+
+        SetResNameArgExprs[2] = ImplicitCastExpr::Create(
+            Context, Context.getIntTypeForBitwidth(32, 0), CK_IntegralCast,
+            StrLengthLiteral, nullptr, VK_RValue);
+
+        MultiExprArg ArgExprs(SetResNameArgExprs, 3);
+        Result = ActOnCallExpr(getCurScope(), SetResNameFnExpr.get(),
+                               SourceLocation(), ArgExprs, SourceLocation());
+      }
+    }
+  }
+
+  return Result;
+}
+
+// RPS Change Ends
 
 void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, bool& Handled)
 {

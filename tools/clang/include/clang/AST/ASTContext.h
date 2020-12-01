@@ -844,6 +844,8 @@ public:
   CanQualType HalfFloatTy, Min16FloatTy, Min16IntTy, Min16UIntTy;
   CanQualType HLSLStringTy;
 
+  std::string RPSResourceNames;
+
   // HLSL Changes end
 
   // Types for deductions in C++0x [stmt.ranged]'s desugaring. Built on demand.

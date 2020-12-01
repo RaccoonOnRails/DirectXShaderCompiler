@@ -4073,6 +4073,11 @@ public:
                         DeclGroupPtrTy &dcl, bool iscbuf);
   // HLSL Change Ends
 
+  // RPS Change Starts
+  //===---------------------------- RPS Features -------------------------===//
+  ExprResult AddRPSSetResourceNameCall(const ValueDecl *ValueDecl, Expr *Initializer);
+  // RPS Change Ends
+
   //===---------------------------- C++ Features --------------------------===//
 
   // Act on C++ namespaces

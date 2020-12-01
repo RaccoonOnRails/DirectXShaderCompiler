@@ -29,6 +29,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
+#include "llvm/IR/Constants.h"  // RPS Change
 #include "llvm/Linker/Linker.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -187,6 +188,8 @@ namespace clang {
       void *OldDiagnosticContext = Ctx.getDiagnosticContext();
       Ctx.setDiagnosticHandler(DiagnosticHandler, this);
 
+      RPSInjectResourceStringGlobal(); // RPS Change
+
       EmitBackendOutput(Diags, CodeGenOpts, TargetOpts, LangOpts,
                         C.getTargetInfo().getTargetDescription(),
                         TheModule.get(), Action, AsmOutStream);
@@ -195,6 +198,25 @@ namespace clang {
 
       Ctx.setDiagnosticHandler(OldDiagnosticHandler, OldDiagnosticContext);
     }
+
+    // RPS Change Begins
+    void RPSInjectResourceStringGlobal() {
+      if (!Context->RPSResourceNames.empty()) {
+        Constant *StrConstant = ConstantDataArray::getString(
+            TheModule->getContext(), Context->RPSResourceNames);
+        GlobalVariable *RpsResourceNameTableGV =
+            dyn_cast<GlobalVariable>(TheModule->getOrInsertGlobal(
+                "__rps_string_table", StrConstant->getType()));
+
+        RpsResourceNameTableGV->setLinkage(GlobalVariable::ExternalLinkage);
+        RpsResourceNameTableGV->setAlignment(4);
+        RpsResourceNameTableGV->setInitializer(StrConstant);
+        RpsResourceNameTableGV->setConstant(true);
+        RpsResourceNameTableGV->setDLLStorageClass(
+            llvm::GlobalValue::DLLExportStorageClass);
+      }
+    }
+    // RPs Change Ends
 
     void HandleTagDeclDefinition(TagDecl *D) override {
       PrettyStackTraceDecl CrashInfo(D, SourceLocation(),

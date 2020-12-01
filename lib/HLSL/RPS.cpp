@@ -65,7 +65,7 @@ struct DxilToRps : public ModulePass {
     RawBytes,
   };
 
-  std::string AddModuleNamePostfix(const char *prefix, Module &M) {
+  std::string AddModuleNamePostfix(const char *prefix) {
     return (prefix + std::string(m_ModuleNameSimplified.empty() ? "" : "_") + m_ModuleNameSimplified);
   }
 
@@ -82,6 +82,13 @@ struct DxilToRps : public ModulePass {
       m_ModuleNameSimplified = llvm::sys::path::stem(m_ModuleNameSimplified);
     }
 
+    static const char *StrTableId = "__rps_string_table";
+    auto StrTableGV = M.getGlobalVariable(StrTableId);
+    if (StrTableGV) {
+      std::string StrTableIdPostfixed = AddModuleNamePostfix(StrTableId);
+      StrTableGV->setName(StrTableIdPostfixed);
+    }
+
     auto voidType = Type::getVoidTy(M.getContext());
     auto intType = Type::getInt32Ty(M.getContext());
     auto nodeCallFunc =
@@ -96,7 +103,7 @@ struct DxilToRps : public ModulePass {
     m_RpsNodeParamPushFunc = dyn_cast<Function>(paramPushFunc);
     m_RpsNodeParamPushFunc->setLinkage(GlobalValue::ExternalLinkage);
 
-    m_ModuleIdGlobal = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(AddModuleNamePostfix("__rps_module_id", M), intType));
+    m_ModuleIdGlobal = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(AddModuleNamePostfix("__rps_module_id"), intType));
 
     ConstantInt *constIntZero = ConstantInt::get(M.getContext(), APInt(32, 0));
     m_ModuleIdGlobal->setInitializer(constIntZero);
@@ -109,6 +116,7 @@ struct DxilToRps : public ModulePass {
     m_RpsLibFuncs.insert(std::make_pair("create_resource", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("create_view", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("clear_view", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("__rps_set_resource_name", nullptr));
 
     SmallVector<Type *, 1> exportWrapperParamType;
     exportWrapperParamType.push_back(
@@ -130,7 +138,7 @@ struct DxilToRps : public ModulePass {
     return true;
   }
 
-  void ReplaceLibFunction(CallInst *C) {
+  void DemangleBuiltinFunctions(CallInst *C) {
     auto calleeF = C->getCalledFunction();
     auto demangledName = DemangleNames(calleeF->getName());
     auto libFuncIter = m_RpsLibFuncs.find(demangledName);
@@ -138,7 +146,9 @@ struct DxilToRps : public ModulePass {
     if (libFuncIter != m_RpsLibFuncs.end()) {
 
       if (libFuncIter->second == nullptr) {
-        auto newFuncName = "__rps_" + demangledName;
+        auto newFuncName =
+            ((demangledName.find_first_of("__rps_") == 0) ? "" : "__rps_") +
+            demangledName;
         calleeF->setName(newFuncName);
         libFuncIter->second = calleeF;
       }
@@ -272,7 +282,8 @@ struct DxilToRps : public ModulePass {
         printf("\n    Callee %s", calleeName.data());
 #endif
 
-        if (DemangleNames(calleeName) == "__rps_asyncmarker") {
+        auto demangledCalleeName = DemangleNames(calleeName);
+        if (demangledCalleeName == "__rps_asyncmarker") {
           pendingAsyncNodeCall = true;
           toRemove.insert(callInst);
           continue;
@@ -372,7 +383,7 @@ struct DxilToRps : public ModulePass {
           callInsts.push_back(callInst);
         }
         else {
-          ReplaceLibFunction(callInst);
+          DemangleBuiltinFunctions(callInst);
         }
       }
     }
@@ -515,7 +526,7 @@ struct DxilToRps : public ModulePass {
     auto arrayValue = ConstantArray::get(nodeDefArrayType, nodeDefConstants);
 
     auto nodedefNameArrayVar = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(
-        AddModuleNamePostfix("__rps_nodedefs", M),
+        AddModuleNamePostfix("__rps_nodedefs"),
         nodeDefArrayType));
     nodedefNameArrayVar->setLinkage(GlobalVariable::ExternalLinkage);
     nodedefNameArrayVar->setAlignment(4);
@@ -552,7 +563,7 @@ struct DxilToRps : public ModulePass {
     auto arrayValue = ConstantArray::get(funcPtrArrayType, funcConstants);
 
     auto exportEntryArrayVar = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(
-        AddModuleNamePostfix("__rps_entries", M),
+        AddModuleNamePostfix("__rps_entries"),
         funcPtrArrayType));
 
     exportEntryArrayVar->setLinkage(GlobalVariable::ExternalLinkage);
