@@ -82,6 +82,23 @@ struct DxilToRps : public ModulePass {
       m_ModuleNameSimplified = llvm::sys::path::stem(m_ModuleNameSimplified);
     }
 
+    InitializeBuiltinsForModule(M);
+
+    for (auto &F : M) {
+#if RPS_DEBUG_VERBOSE
+      printf("\nFunction %s", F.getName().data());
+#endif
+      runOnFunction(M, F);
+    }
+
+    WriteNodeTable(M);
+
+    WriteExportEntries(M);
+
+    return true;
+  }
+
+  void InitializeBuiltinsForModule(Module &M) {
     static const char *StrTableId = "__rps_string_table";
     auto StrTableGV = M.getGlobalVariable(StrTableId);
     if (StrTableGV) {
@@ -99,17 +116,20 @@ struct DxilToRps : public ModulePass {
 
     auto int8PtrType = Type::getInt8PtrTy(M.getContext());
     auto paramPushFunc =
-        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType, intType, intType, intType, nullptr);
+        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType,
+                              intType, intType, intType, nullptr);
     m_RpsNodeParamPushFunc = dyn_cast<Function>(paramPushFunc);
     m_RpsNodeParamPushFunc->setLinkage(GlobalValue::ExternalLinkage);
 
-    m_ModuleIdGlobal = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(AddModuleNamePostfix("__rps_module_id"), intType));
+    m_ModuleIdGlobal = dyn_cast<GlobalVariable>(
+        M.getOrInsertGlobal(AddModuleNamePostfix("__rps_module_id"), intType));
 
     ConstantInt *constIntZero = ConstantInt::get(M.getContext(), APInt(32, 0));
     m_ModuleIdGlobal->setInitializer(constIntZero);
     m_ModuleIdGlobal->setLinkage(GlobalValue::ExternalLinkage);
     m_ModuleIdGlobal->setConstant(false);
-    m_ModuleIdGlobal->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+    m_ModuleIdGlobal->setDLLStorageClass(
+        llvm::GlobalValue::DLLExportStorageClass);
 
     m_RpsLibFuncs.insert(std::make_pair("describe_resource", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("describe_view", nullptr));
@@ -123,19 +143,6 @@ struct DxilToRps : public ModulePass {
         Type::getInt8PtrTy(M.getContext())->getPointerTo());
     m_RpsExportWrapperFuncType = FunctionType::get(
         llvm::Type::getVoidTy(M.getContext()), exportWrapperParamType, false);
-
-    for (auto &F : M) {
-#if RPS_DEBUG_VERBOSE
-      printf("\nFunction %s", F.getName().data());
-#endif
-      runOnFunction(M, F);
-    }
-
-    WriteNodeTable(M);
-
-    WriteExportEntries(M);
-
-    return true;
   }
 
   void DemangleBuiltinFunctions(CallInst *C) {
@@ -261,7 +268,7 @@ struct DxilToRps : public ModulePass {
       m_RpsExportEntries.push_back(&F);
     }
 
-    llvm::SmallVector<CallInst *, 32> callInsts;
+    llvm::SmallVector<CallInst *, 32> callInstsToRemove;
 
     bool pendingAsyncNodeCall = false;
 
@@ -293,94 +300,8 @@ struct DxilToRps : public ModulePass {
         auto nodeDefIdx = getNodeDefIndex(DM, calleeF);
 
         if (nodeDefIdx >= 0) {
-          auto nodeDefIdxVal = ConstantInt::get(
-              Type::getInt32Ty(F.getContext()), nodeDefIdx, false);
-
-          auto argIter = callSite.arg_begin();
-
-          // Check async compute hint
-          auto &nodeDefInfo = m_RpsNodeInfos[nodeDefIdx];
-
-          bool isAsyncNode = false;
-          // TODO: Handle copy separately
-          if (pendingAsyncNodeCall) {
-            if ((nodeDefInfo.flags & RPS_COMMAND_TYPE_COMPUTE_BIT) ||
-                (nodeDefInfo.flags & RPS_COMMAND_TYPE_COPY_BIT)) {
-              isAsyncNode = pendingAsyncNodeCall;
-            }
-            pendingAsyncNodeCall = false;
-          }
-
-          static const unsigned RPS_COMMAND_ASYNC_COMPUTE = 1 << 1;
-
-          auto nodeFlagsVal = ConstantInt::get(
-              Type::getInt32Ty(F.getContext()),
-              (isAsyncNode ? RPS_COMMAND_ASYNC_COMPUTE : 0), false);
-
-          argIter++;
-
-          auto dstType = Type::getInt8PtrTy(F.getContext());
-
-          Instruction *firstStoreInst = nullptr;
-          Instruction *firstCastInst = nullptr;
-          Instruction *firstPushInst = nullptr;
-
-          uint32_t argIndex = 1;
-          for (; argIter != callSite.arg_end(); argIter++, argIndex++) {
-
-            auto argValue = argIter->get();
-
-            auto insertBefore = firstStoreInst ? firstStoreInst : callInst;
-
-            auto ptrInst =
-                new AllocaInst(argValue->getType(), "", insertBefore);
-
-            insertBefore = firstCastInst ? firstCastInst : callInst;
-
-            auto storeInst =
-                new StoreInst(argValue, ptrInst, false, insertBefore);
-
-            firstStoreInst = firstStoreInst ? firstStoreInst : storeInst;
-
-            insertBefore = firstPushInst ? firstPushInst : callInst;
-
-            auto argAsBytePtrVal = CastInst::Create(Instruction::CastOps::BitCast, ptrInst,
-                                 dstType, "", insertBefore);
-
-            firstCastInst = firstCastInst ? firstCastInst : argAsBytePtrVal;
-
-
-            Type *pArgType = argValue->getType();
-            if (pArgType->isPointerTy()) {
-              pArgType = dyn_cast<PointerType>(pArgType)->getElementType();
-            }
-
-            ConstantInt *argSizeInBytesVal = ConstantInt::get(
-                M.getContext(), APInt(32, M.getDataLayout().getTypeAllocSize(pArgType)));
-
-            NodeParamTypeCategory paramTypeCategory =
-                GetNodeParamTypeCategory(M, pArgType);
-
-            ConstantInt *paramTypeCategoryVal = ConstantInt::get(
-                M.getContext(), APInt(32, uint32_t(paramTypeCategory)));
-
-            ConstantInt *paramFlagsVal = ConstantInt::get(
-                M.getContext(),
-                APInt(32, uint32_t(nodeDefInfo.paramFlags[argIndex])));
-
-            auto pushInst = CallInst::Create(
-                m_RpsNodeParamPushFunc,
-                { argAsBytePtrVal, argSizeInBytesVal, paramTypeCategoryVal, paramFlagsVal },
-                "", callInst);
-
-            firstPushInst = firstPushInst ? firstPushInst : pushInst;
-          }
-
-          auto loadModuleId = new LoadInst(m_ModuleIdGlobal, "", callInst);
-          CallInst::Create(m_RpsNodeCallFunc, { loadModuleId, nodeDefIdxVal, nodeFlagsVal }, "",
-                           callInst);
-
-          callInsts.push_back(callInst);
+          ProcessNodeCall(M, F, nodeDefIdx, callSite, callInst,
+                          pendingAsyncNodeCall, callInstsToRemove);
         }
         else {
           DemangleBuiltinFunctions(callInst);
@@ -388,7 +309,7 @@ struct DxilToRps : public ModulePass {
       }
     }
 
-    for (auto &inst : callInsts) {
+    for (auto &inst : callInstsToRemove) {
       inst->eraseFromParent();
     }
 
@@ -412,6 +333,97 @@ struct DxilToRps : public ModulePass {
       assert(false);
     }
     toRemove.erase(U);
+  }
+
+  void ProcessNodeCall(Module& M, Function &F, uint32_t nodeDefIdx, CallSite &callSite,
+                       CallInst *callInst, bool &pendingAsyncNodeCall,
+                       SmallVector<CallInst *, 32> &callInstsToRemove) {
+    auto nodeDefIdxVal =
+        ConstantInt::get(Type::getInt32Ty(F.getContext()), nodeDefIdx, false);
+
+    auto argIter = callSite.arg_begin();
+
+    // Check async compute hint
+    auto &nodeDefInfo = m_RpsNodeInfos[nodeDefIdx];
+
+    bool isAsyncNode = false;
+    // TODO: Handle copy separately
+    if (pendingAsyncNodeCall) {
+      if ((nodeDefInfo.flags & RPS_COMMAND_TYPE_COMPUTE_BIT) ||
+          (nodeDefInfo.flags & RPS_COMMAND_TYPE_COPY_BIT)) {
+        isAsyncNode = pendingAsyncNodeCall;
+      }
+      pendingAsyncNodeCall = false;
+    }
+
+    static const unsigned RPS_COMMAND_ASYNC_COMPUTE = 1 << 1;
+
+    auto nodeFlagsVal =
+        ConstantInt::get(Type::getInt32Ty(F.getContext()),
+                         (isAsyncNode ? RPS_COMMAND_ASYNC_COMPUTE : 0), false);
+
+    argIter++;
+
+    auto dstType = Type::getInt8PtrTy(F.getContext());
+
+    Instruction *firstStoreInst = nullptr;
+    Instruction *firstCastInst = nullptr;
+    Instruction *firstPushInst = nullptr;
+
+    uint32_t argIndex = 1;
+    for (; argIter != callSite.arg_end(); argIter++, argIndex++) {
+
+      auto argValue = argIter->get();
+
+      auto insertBefore = firstStoreInst ? firstStoreInst : callInst;
+
+      auto ptrInst = new AllocaInst(argValue->getType(), "", insertBefore);
+
+      insertBefore = firstCastInst ? firstCastInst : callInst;
+
+      auto storeInst = new StoreInst(argValue, ptrInst, false, insertBefore);
+
+      firstStoreInst = firstStoreInst ? firstStoreInst : storeInst;
+
+      insertBefore = firstPushInst ? firstPushInst : callInst;
+
+      auto argAsBytePtrVal = CastInst::Create(
+          Instruction::CastOps::BitCast, ptrInst, dstType, "", insertBefore);
+
+      firstCastInst = firstCastInst ? firstCastInst : argAsBytePtrVal;
+
+      Type *pArgType = argValue->getType();
+      if (pArgType->isPointerTy()) {
+        pArgType = dyn_cast<PointerType>(pArgType)->getElementType();
+      }
+
+      ConstantInt *argSizeInBytesVal = ConstantInt::get(
+          M.getContext(),
+          APInt(32, M.getDataLayout().getTypeAllocSize(pArgType)));
+
+      NodeParamTypeCategory paramTypeCategory =
+          GetNodeParamTypeCategory(M, pArgType);
+
+      ConstantInt *paramTypeCategoryVal = ConstantInt::get(
+          M.getContext(), APInt(32, uint32_t(paramTypeCategory)));
+
+      ConstantInt *paramFlagsVal = ConstantInt::get(
+          M.getContext(),
+          APInt(32, uint32_t(nodeDefInfo.paramFlags[argIndex])));
+
+      auto pushInst = CallInst::Create(m_RpsNodeParamPushFunc,
+                                       {argAsBytePtrVal, argSizeInBytesVal,
+                                        paramTypeCategoryVal, paramFlagsVal},
+                                       "", callInst);
+
+      firstPushInst = firstPushInst ? firstPushInst : pushInst;
+    }
+
+    auto loadModuleId = new LoadInst(m_ModuleIdGlobal, "", callInst);
+    CallInst::Create(m_RpsNodeCallFunc,
+                     {loadModuleId, nodeDefIdxVal, nodeFlagsVal}, "", callInst);
+
+    callInstsToRemove.push_back(callInst);
   }
 
   int32_t getNodeDefIndex(hlsl::DxilModule &DM, Function *F) {
