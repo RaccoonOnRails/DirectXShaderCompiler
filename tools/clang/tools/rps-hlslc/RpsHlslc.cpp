@@ -653,9 +653,10 @@ int main(const int argc, const char *argv[]) {
 #endif
 
   if (OutputCbe.getValue()) {
-    result = system((currExecDir + "/llvm-cbe.exe " + tmpRpsLLFile +
-                     " -o " + OutputFileDirectoryAndStem + ".rpsl.g.c")
-                        .c_str());
+    std::string cbeCmd = "\"\"" + currExecDir + "/llvm-cbe.exe\" \"" +
+                         tmpRpsLLFile + "\" -o \"" +
+                         OutputFileDirectoryAndStem + ".rpsl.g.c\"\"";
+    result = system(cbeCmd.c_str());
   }
 
   return result;
