@@ -11,8 +11,12 @@
 #include <unordered_map>
 #include <functional>
 #include <wrl/client.h>
+#include "dxc/Support/Global.h"
 #include <llvm/Support/Path.h>
 #include <llvm/Support/CommandLine.h>
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/MSFileSystem.h"
+#include "llvm/Support/raw_ostream.h"
 
 #define RPS_ENABLE_DEBUG_INFO 1
 #define RPS_DEBUG_AST_DUMP 0
@@ -86,9 +90,10 @@ bool LoadDxc() {
 using Microsoft::WRL::ComPtr;
 using namespace std::string_literals;
 
-void ThrowIfFailed(HRESULT hr) {
+void ExitIfFailed(HRESULT hr, const char* msg) {
   if (FAILED(hr)) {
-    throw;
+    llvm::errs() << msg;
+    exit(hr);
   }
 }
 
@@ -461,13 +466,13 @@ public:
 
 ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   ComPtr<IDxcLibrary> pLibrary;
-  ThrowIfFailed(
-      g_pfnDxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&pLibrary)));
+  ExitIfFailed(
+      g_pfnDxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(&pLibrary)), "Failed to create IDxcLibrary instance.");
 
   FILE *fp = {};
   fopen_s(&fp, fileName, "rb");
   if (!fp) {
-    printf("Failed to open file '%s'", fileName);
+    llvm::errs() << "\nFailed to open file '" << fileName << "'";
     return nullptr;
   }
 
@@ -483,12 +488,14 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   fclose(fp);
 
   ComPtr<IDxcBlobEncoding> pSource, pError;
-  ThrowIfFailed(pLibrary->CreateBlobWithEncodingFromPinned(
-      text.data(), static_cast<UINT32>(text.size()), CP_UTF8, &pSource));
+  ExitIfFailed(pLibrary->CreateBlobWithEncodingFromPinned(
+      text.data(), static_cast<UINT32>(text.size()), CP_UTF8, &pSource),
+      "Failed to create source blob.");
 
   ComPtr<IDxcCompiler> pCompiler;
-  ThrowIfFailed(
-      g_pfnDxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&pCompiler)));
+  ExitIfFailed(
+      g_pfnDxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&pCompiler)),
+      "Failed to create IDxcCompiler instance.");
 
   size_t nConv = 0;
   wchar_t fileNameW[MAX_PATH + 1];
@@ -525,18 +532,16 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
   }
 
   if (pError) {
-    ComPtr<IDxcBlobEncoding> pErrorUtf16;
-    pLibrary->GetBlobAsUtf16(pError.Get(), &pErrorUtf16);
-    std::wstring errText(
-        reinterpret_cast<WCHAR *>(pErrorUtf16->GetBufferPointer()),
-        reinterpret_cast<WCHAR *>(pErrorUtf16->GetBufferPointer()) +
-            pErrorUtf16->GetBufferSize() / 2);
-    wprintf(L"\n");
-    wprintf(errText.c_str());
+    ComPtr<IDxcBlobEncoding> pErrorUtf8;
+    pLibrary->GetBlobAsUtf8(pError.Get(), &pErrorUtf8);
+    std::string errText(
+        reinterpret_cast<char *>(pErrorUtf8->GetBufferPointer()),
+        pErrorUtf8->GetBufferSize());
+    llvm::errs() << "\n" << errText;
   }
 
   if (FAILED(hr)) {
-    printf("Failed to compile '%s'", fileName);
+    llvm::errs() << "\nFailed to compile '" << fileName << "'";
     return nullptr;
   }
 
@@ -555,26 +560,29 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
     return nullptr;
 #endif // RPS_DEBUG_AST_DUMP
 
-    ComPtr<IDxcBlobEncoding> pDisasm;
-    ThrowIfFailed(pCompiler->Disassemble(pContainer.Get(), &pDisasm));
+    if (DumpOriginalIL || DumpOriginalILBin) {
+      ComPtr<IDxcBlobEncoding> pDisasm;
+      ExitIfFailed(pCompiler->Disassemble(pContainer.Get(), &pDisasm),
+                   "Failed to disassemble container.");
 
-    if (DumpOriginalIL) {
-      fp = {};
-      fopen_s(&fp, (std::string(fileName) + ".dxil.txt").c_str(), "wb");
-      if (fp) {
-        fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
+      if (DumpOriginalIL) {
+        fp = {};
+        fopen_s(&fp, (std::string(fileName) + ".dxil.txt").c_str(), "wb");
+        if (fp) {
+          fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
+        }
+        fclose(fp);
       }
-      fclose(fp);
-    }
 
-    if (DumpOriginalILBin) {
-      fp = {};
-      fopen_s(&fp, (std::string(fileName) + ".dxil.blob").c_str(), "wb");
-      if (fp) {
-        fwrite(pContainer->GetBufferPointer(), 1, pContainer->GetBufferSize(),
-               fp);
+      if (DumpOriginalILBin) {
+        fp = {};
+        fopen_s(&fp, (std::string(fileName) + ".dxil.blob").c_str(), "wb");
+        if (fp) {
+          fwrite(pContainer->GetBufferPointer(), 1, pContainer->GetBufferSize(),
+                 fp);
+        }
+        fclose(fp);
       }
-      fclose(fp);
     }
   }
 
@@ -584,22 +592,37 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
 void DisassembleRps(const ComPtr<IDxcBlob> &pRpsBC, const char* tmpFileName) {
   ComPtr<IDxcCompiler> pCompiler;
 
-  ThrowIfFailed(
-      g_pfnDxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&pCompiler)));
+  ExitIfFailed(
+      g_pfnDxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&pCompiler)),
+      "Failed to create IDxcCompiler instance for disassembling.");
 
   ComPtr<IDxcBlobEncoding> pDisasm;
-  ThrowIfFailed(pCompiler->Disassemble(pRpsBC.Get(), &pDisasm));
+  ExitIfFailed(pCompiler->Disassemble(pRpsBC.Get(), &pDisasm),
+      "Failed to disassemble container.");
 
-  FILE *fp = {};
-  fopen_s(&fp, tmpFileName, "wb");
-  if (fp) {
-    fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
-    fclose(fp);
+  if (pDisasm) {
+    FILE *fp = {};
+    fopen_s(&fp, tmpFileName, "wb");
+    if (fp) {
+      fwrite(pDisasm->GetBufferPointer(), 1, pDisasm->GetBufferSize(), fp);
+      fclose(fp);
+    }
   }
 }
 
 int main(const int argc, const char *argv[]) {
   int result = 0;
+
+  DxcInitThreadMalloc();
+  DxcSetThreadMallocToDefault();
+  if (::llvm::sys::fs::SetupPerThreadFileSystem()) {
+    return -1;
+  }
+
+  ::llvm::sys::fs::MSFileSystem *msfPtr;
+  IFT(CreateMSFileSystemForDisk(&msfPtr));
+  std::unique_ptr<::llvm::sys::fs::MSFileSystem> msf(msfPtr);
+  ::llvm::sys::fs::AutoPerThreadSystem pts(msf.get());
 
   // Parse command line options.
   cl::ParseCommandLineOptions(argc, argv, "dxil assembly\n");
@@ -610,7 +633,7 @@ int main(const int argc, const char *argv[]) {
 
   SHCreateDirectoryExA(NULL, OutputDirectory.c_str(), NULL);
 
-  printf("Using rps-hlslc.exe in %s", currExecDir.c_str());
+  llvm::errs() << "\nUsing rps-hlslc.exe in " << currExecDir;
 
   if (OutputModuleName != "-") {
     OutputFileStem = OutputModuleName;
@@ -651,6 +674,11 @@ int main(const int argc, const char *argv[]) {
                .c_str());
   }
 #endif
+
+  if (llvm::errs().has_error()) {
+    llvm::errs().flush();
+    llvm::errs().clear_error();
+  }
 
   if (OutputCbe.getValue()) {
     std::string cbeCmd = "\"\"" + currExecDir + "/llvm-cbe.exe\" \"" +
