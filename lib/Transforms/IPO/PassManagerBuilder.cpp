@@ -207,7 +207,7 @@ void PassManagerBuilder::populateFunctionPassManager(
 }
 
 // HLSL Change Starts
-static void addHLSLPasses(bool HLSLHighLevel, unsigned OptLevel, hlsl::HLSLExtensionsCodegenHelper *ExtHelper, legacy::PassManagerBase &MPM) {
+static void addHLSLPasses(bool HLSLHighLevel, unsigned OptLevel, hlsl::HLSLExtensionsCodegenHelper *ExtHelper, legacy::PassManagerBase &MPM, bool HLSLRps) { // RPS Change
 
   // Don't do any lowering if we're targeting high-level.
   if (HLSLHighLevel) {
@@ -290,6 +290,12 @@ static void addHLSLPasses(bool HLSLHighLevel, unsigned OptLevel, hlsl::HLSLExten
   // Verify no undef resource again after promotion
   MPM.add(createInvalidateUndefResourcesPass());
 
+  // RPS Change Begins.
+   if (HLSLRps) {
+    MPM.add(createDxilToRpsPass());
+  }
+  // RPS Change Ends.
+
   MPM.add(createDxilGenerationPass(NoOpt, ExtHelper));
 
   // Propagate precise attribute.
@@ -355,7 +361,7 @@ void PassManagerBuilder::populateModulePassManager(
     addExtensionsToPM(EP_EnabledOnOptLevel0, MPM);
 
     // HLSL Change Begins.
-    addHLSLPasses(HLSLHighLevel, OptLevel, HLSLExtensionsCodeGen, MPM);
+    addHLSLPasses(HLSLHighLevel, OptLevel, HLSLExtensionsCodeGen, MPM, HLSLRps); // RPS Change
     if (!HLSLHighLevel) {
       MPM.add(createDxilConvergentClearPass());
       MPM.add(createMultiDimArrayToOneDimArrayPass());
@@ -388,7 +394,7 @@ void PassManagerBuilder::populateModulePassManager(
     delete Inliner;
     Inliner = nullptr;
   }
-  addHLSLPasses(HLSLHighLevel, OptLevel, HLSLExtensionsCodeGen, MPM); // HLSL Change
+  addHLSLPasses(HLSLHighLevel, OptLevel, HLSLExtensionsCodeGen, MPM, HLSLRps); // HLSL Change // RPS Change
   // HLSL Change Ends
 
   // Add LibraryInfo if we have some.
@@ -668,11 +674,6 @@ void PassManagerBuilder::populateModulePassManager(
   }
   // HLSL Change Ends.
 
-  // RPS Change Begins.
-  if (HLSLRps) {
-    MPM.add(createDxilToRpsPass());
-  }
-  // RPS Change Ends.
   addExtensionsToPM(EP_OptimizerLast, MPM);
 }
 
