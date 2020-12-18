@@ -1553,6 +1553,13 @@ void CGMSHLSLRuntime::AddHLSLFunctionInfo(Function *F, const FunctionDecl *FD) {
       } else if (nullptr != FD->getAttr<RPSCopyNodeAttr>()) {
         entryKind = DXIL::RPS::EntryKind::CopyNodeDef;
         isRPSNodeDef = true;
+      } else {
+        // TODO: Cache nodeidentifier type pointer.
+        auto retTypeName = FD->getReturnType().getUnqualifiedType().getAsString();
+        if (retTypeName == "nodeidentifier") {
+          entryKind = DXIL::RPS::EntryKind::GraphicsNodeDef;
+          isRPSNodeDef = true;
+        }
       }
     }
     if (entryKind != DXIL::RPS::EntryKind::None) {
@@ -1692,6 +1699,10 @@ void CGMSHLSLRuntime::AddHLSLFunctionInfo(Function *F, const FunctionDecl *FD) {
 
     
     // RPS Change Begins
+    if (isRPSNodeDef) {
+      paramAnnotation.SetFieldName(parmDecl->getName());
+      paramAnnotation.SetTypeName(parmDecl->getType().getAsString());
+    }
     uint32_t accessFlags = DXIL::RPS::RPS_RESOURCE_ACCESS_NO_FLAGS;
     if (parmDecl->hasAttr<RPSRelaxedOrderingAttr>()) {
       accessFlags |= DXIL::RPS::RPS_RESOURCE_ACCESS_RELAXED_ORDER_BIT;
