@@ -20,17 +20,17 @@
 #ifdef RC_VERSION_FIELD_3
 #undef RC_VERSION_FIELD_3
 #endif
-#define RC_VERSION_FIELD_3 0
+#define RC_VERSION_FIELD_3 1
 
 #ifdef RC_VERSION_FIELD_4
 #undef RC_VERSION_FIELD_4
 #endif
-#define RC_VERSION_FIELD_4 0
+#define RC_VERSION_FIELD_4 1208
 
 #ifdef RC_FILE_VERSION
 #undef RC_FILE_VERSION
 #endif
-#define RC_FILE_VERSION "0.1.0.0"
+#define RC_FILE_VERSION "0.1.1.1208"
 
 #ifdef RC_FILE_DESCRIPTION
 #undef RC_FILE_DESCRIPTION
@@ -50,4 +50,4 @@
 #ifdef RC_PRODUCT_VERSION
 #undef RC_PRODUCT_VERSION
 #endif
-#define RC_PRODUCT_VERSION "0.1.0.0 (closed beta)"
+#define RC_PRODUCT_VERSION "0.1.1.1208 (closed beta)"
