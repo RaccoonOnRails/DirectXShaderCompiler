@@ -88,6 +88,8 @@ DXIL::RPS::RpsResourceAccessFlagBits DxilFieldAnnotation::GetRPSAccessFlags() co
 void DxilFieldAnnotation::SetRPSAccessFlags(DXIL::RPS::RpsResourceAccessFlagBits accessFlags) {
   m_RpsAccessFlags = accessFlags;
 }
+const std::string &DxilFieldAnnotation::GetTypeName() { return m_TypeName; }
+void DxilFieldAnnotation::SetTypeName(const std::string &typeName) { m_TypeName = typeName; }
 // RPS Change Ends
 
 //------------------------------------------------------------------------------

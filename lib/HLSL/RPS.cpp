@@ -17,6 +17,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 
@@ -45,10 +46,30 @@ struct DxilToRps : public ModulePass {
     RPS_COMMAND_TYPE_EXTERNAL_WRITE_BIT         = (1 << 9),     ///< Command does some external write, such as updating debug CPU data.
   };
 
+  enum class NodeParamTypeCategory {
+    Resource,
+    View,
+    RawBytes,
+  };
+
+  struct RpsNodeParamInfo {
+    std::string name;
+    std::string typeName;
+    std::string semanticName;
+    uint32_t semanticIndex;
+    NodeParamTypeCategory category;
+    uint32_t flags;
+    uint32_t sizeInBytes;
+
+    RpsNodeParamInfo()
+        : semanticIndex(0), category(NodeParamTypeCategory::RawBytes), flags(0),
+          sizeInBytes(0) {}
+  };
+
   struct RpsNodeDefInfo {
     std::string name;
     uint32_t flags;
-    SmallVector<uint32_t, 16> paramFlags;
+    SmallVector<RpsNodeParamInfo, 16> paramInfos;
   };
 
   std::vector<RpsNodeDefInfo> m_RpsNodeInfos = {};
@@ -59,19 +80,13 @@ struct DxilToRps : public ModulePass {
   llvm::FunctionType *m_RpsExportWrapperFuncType;
   std::string m_ModuleNameSimplified;
 
-  enum class NodeParamTypeCategory {
-    Resource,
-    View,
-    RawBytes,
-  };
-
   std::string AddModuleNamePostfix(const char *prefix) {
     return (prefix + std::string(m_ModuleNameSimplified.empty() ? "" : "_") + m_ModuleNameSimplified);
   }
 
   bool runOnModule(Module &M) override {
 
-    hlsl::DxilModule &DM = M.GetDxilModule();
+    hlsl::HLModule &DM = M.GetHLModule();
 
     if (!DM.GetShaderModel()->IsRPS()) {
       return false;
@@ -250,7 +265,7 @@ struct DxilToRps : public ModulePass {
 
   bool runOnFunction(Module &M, Function &F) {
 
-    hlsl::DxilModule &DM = M.GetDxilModule();
+    hlsl::HLModule &DM = M.GetHLModule();
 
     SmallPtrSet<llvm::User *, 32> toRemove;
 
@@ -297,7 +312,7 @@ struct DxilToRps : public ModulePass {
         }
 
         // Check if it's a node call
-        auto nodeDefIdx = getNodeDefIndex(DM, calleeF);
+        auto nodeDefIdx = getNodeDefIndex(M, DM, calleeF);
 
         if (nodeDefIdx >= 0) {
           ProcessNodeCall(M, F, nodeDefIdx, callSite, callInst,
@@ -409,7 +424,7 @@ struct DxilToRps : public ModulePass {
 
       ConstantInt *paramFlagsVal = ConstantInt::get(
           M.getContext(),
-          APInt(32, uint32_t(nodeDefInfo.paramFlags[argIndex])));
+          APInt(32, uint32_t(nodeDefInfo.paramInfos[argIndex].flags)));
 
       auto pushInst = CallInst::Create(m_RpsNodeParamPushFunc,
                                        {argAsBytePtrVal, argSizeInBytesVal,
@@ -426,7 +441,7 @@ struct DxilToRps : public ModulePass {
     callInstsToRemove.push_back(callInst);
   }
 
-  int32_t getNodeDefIndex(hlsl::DxilModule &DM, Function *F) {
+  int32_t getNodeDefIndex(Module& M, hlsl::HLModule &DM, Function *F) {
 
     auto &DMTypeSystem = DM.GetTypeSystem();
 
@@ -479,16 +494,31 @@ struct DxilToRps : public ModulePass {
                   std::make_pair(funcName, m_RpsNodeInfos.size()));
 
               m_RpsNodeInfos.emplace_back();
-              m_RpsNodeInfos.back().name = funcName;
-              m_RpsNodeInfos.back().flags = nodeFlags;
+              auto& newNode = m_RpsNodeInfos.back();
+              
+              newNode.name = funcName;
+              newNode.flags = nodeFlags;
 
               auto pFuncAnnotation = DMTypeSystem.GetFunctionAnnotation(F);
               if (pFuncAnnotation) {
-                m_RpsNodeInfos.back().paramFlags.resize(pFuncAnnotation->GetNumParameters(), 0);
+                assert(F->arg_size() == pFuncAnnotation->GetNumParameters());
+                newNode.paramInfos.resize(pFuncAnnotation->GetNumParameters());
+                auto argIter = F->arg_begin();
 
                 for (uint32_t iArg = 0; iArg < pFuncAnnotation->GetNumParameters(); iArg++) {
                   auto &argAnnotation = pFuncAnnotation->GetParameterAnnotation(iArg);
-                  m_RpsNodeInfos.back().paramFlags[iArg] = argAnnotation.GetRPSAccessFlags();
+                  auto& currParam = newNode.paramInfos[iArg];
+                  currParam.flags = argAnnotation.GetRPSAccessFlags();
+                  currParam.name = argAnnotation.GetFieldName();
+                  currParam.typeName = argAnnotation.GetTypeName();
+                  currParam.sizeInBytes =
+                      M.getDataLayout().getTypeAllocSize(argIter->getType());
+                  currParam.semanticName = argAnnotation.GetSemanticString();
+                  currParam.semanticIndex =
+                      argAnnotation.GetSemanticIndexVec().empty()
+                          ? 0
+                          : argAnnotation.GetSemanticIndexVec()[0];
+                  argIter++;
                 }
               }
             } else {

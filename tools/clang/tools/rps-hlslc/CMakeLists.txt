@@ -2,12 +2,13 @@
 
 set( LLVM_LINK_COMPONENTS
   ${LLVM_TARGETS_TO_BUILD}
-#  dxcsupport
+   dxcsupport
 #  DXIL
 #  DxilContainer
 #  HLSL
 #  Option     # option library
    Support    # just for assert and raw streams
+   MSSupport
   )
 
 set(HLSL_IGNORE_SOURCES RpsHlslcDummyDXIL.cpp)

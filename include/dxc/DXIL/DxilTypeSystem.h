@@ -85,6 +85,8 @@ public:
   // RPS Change Begins
   DXIL::RPS::RpsResourceAccessFlagBits GetRPSAccessFlags() const;
   void SetRPSAccessFlags(DXIL::RPS::RpsResourceAccessFlagBits accessFlags);
+  const std::string &GetTypeName();
+  void SetTypeName(const std::string &typeName);
   // RPS Change Ends
 
 private:
@@ -99,6 +101,7 @@ private:
   bool m_bCBufferVarUsed; // true if this field represents a top level variable in CB structure, and it is used.
   // RPS Change Begins
   DXIL::RPS::RpsResourceAccessFlagBits m_RpsAccessFlags;
+  std::string m_TypeName;
   // RPS Change Ends
 };
 
