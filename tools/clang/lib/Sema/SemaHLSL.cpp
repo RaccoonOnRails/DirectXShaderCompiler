@@ -11136,8 +11136,9 @@ ExprResult Sema::AddRPSSetResourceNameCall(const ValueDecl *ValueDecl,
           getCurScope(), SS, SourceLocation(), Name, true, false);
 
       if (!SetResNameFnExpr.isInvalid()) {
-        uint32_t nameBegin = Context.RPSResourceNames.length();
-        Context.RPSResourceNames += DIdentName.str() + ";";
+        uint32_t nameBegin = Context.RPSResourceNames.size();
+        Context.RPSResourceNames.insert(Context.RPSResourceNames.end(), DIdentName.data(), DIdentName.data() + DIdentName.size());
+        Context.RPSResourceNames.push_back('\0');
 
         Expr *SetResNameArgExprs[3];
         SetResNameArgExprs[0] = Initializer;

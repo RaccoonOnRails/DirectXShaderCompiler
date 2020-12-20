@@ -242,6 +242,7 @@ void CodeGenModule::createHLSLRuntime() {
 }
 
 void CodeGenModule::FinishCodeGen() {
+  HLSLRuntime->EmitRPSStringTable(Context.RPSResourceNames);
   HLSLRuntime->FinishCodeGen();
 }
 // HLSL Change Ends

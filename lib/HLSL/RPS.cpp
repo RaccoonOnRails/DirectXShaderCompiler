@@ -10,6 +10,8 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DiagnosticInfo.h"
+#include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/IRBuilder.h"
@@ -25,6 +27,21 @@ using namespace llvm;
 #define DEBUG_TYPE "rps"
 
 namespace {
+
+class RpsGenDiagnosticInfo : public DiagnosticInfo {
+  std::string m_Msg;
+public:
+  RpsGenDiagnosticInfo(const char *msg, DiagnosticSeverity Severity)
+      : DiagnosticInfo(GetDiagnosticKind(), Severity), m_Msg(msg) {}
+
+  virtual void print(DiagnosticPrinter &DP) const override { DP << m_Msg; }
+private:
+  static int GetDiagnosticKind() {
+    static const int s_DiagnosticKind = getNextAvailablePluginDiagnosticKind();
+    return s_DiagnosticKind;
+  }
+};
+
 // Rps - The second implementation with getAnalysisUsage implemented.
 struct DxilToRps : public ModulePass {
   static char ID; // Pass identification, replacement for typeid
@@ -46,10 +63,45 @@ struct DxilToRps : public ModulePass {
     RPS_COMMAND_TYPE_EXTERNAL_WRITE_BIT         = (1 << 9),     ///< Command does some external write, such as updating debug CPU data.
   };
 
-  enum class NodeParamTypeCategory {
-    Resource,
-    View,
-    RawBytes,
+  enum class RpsBasicType : uint8_t
+  {
+    RPS_TYPE_UNKNOWN,
+    RPS_TYPE_BOOL,
+    RPS_TYPE_SINT,
+    RPS_TYPE_UINT,
+    RPS_TYPE_FLOAT,
+    RPS_TYPE_STRUCT,
+    RPS_TYPE_VIEW,
+    RPS_TYPE_RESOURCE,
+  };
+
+  struct RpsTypeInfo {
+    RpsBasicType elementType;
+    uint8_t elementBitWidth;
+    uint8_t rows;
+    uint8_t columns;
+    uint32_t arrayElementsOrPtr;
+    uint32_t sizeInBytes;
+    uint32_t alignment;
+
+    bool operator==(const RpsTypeInfo& rhs) const {
+      return (elementType == rhs.elementType) && 
+             (elementBitWidth == rhs.elementBitWidth) &&
+             (rows == rhs.rows) &&
+             (columns == rhs.columns) &&
+             (arrayElementsOrPtr == rhs.arrayElementsOrPtr) &&
+             (sizeInBytes == rhs.sizeInBytes) &&
+             (alignment == rhs.alignment);
+    }
+  };
+
+  struct RpsTypeInfoHasher {
+    size_t operator()(const RpsTypeInfo &val) const {
+      return (uint32_t(val.elementType) | (uint32_t(val.elementBitWidth) << 8) |
+              (uint32_t(val.rows) << 16) | (uint32_t(val.columns) << 24)) ^
+             val.arrayElementsOrPtr ^ (uint32_t(val.sizeInBytes) << 16) ^
+             (val.alignment << 24);
+    }
   };
 
   struct RpsNodeParamInfo {
@@ -57,13 +109,11 @@ struct DxilToRps : public ModulePass {
     std::string typeName;
     std::string semanticName;
     uint32_t semanticIndex;
-    NodeParamTypeCategory category;
+    uint32_t typeInfoIndex;
     uint32_t flags;
-    uint32_t sizeInBytes;
 
     RpsNodeParamInfo()
-        : semanticIndex(0), category(NodeParamTypeCategory::RawBytes), flags(0),
-          sizeInBytes(0) {}
+        : semanticIndex(0), typeInfoIndex(UINT32_MAX), flags(0) {}
   };
 
   struct RpsNodeDefInfo {
@@ -79,6 +129,10 @@ struct DxilToRps : public ModulePass {
   GlobalVariable *m_ModuleIdGlobal = nullptr;
   llvm::FunctionType *m_RpsExportWrapperFuncType;
   std::string m_ModuleNameSimplified;
+  std::vector<char> m_StrTableValueString;
+  std::unordered_map<std::string, uint32_t> m_StrTableEntries;
+  std::vector<RpsTypeInfo> m_RpsTypes;
+  std::unordered_map<RpsTypeInfo, uint32_t, RpsTypeInfoHasher> m_RpsTypesLookup;
 
   std::string AddModuleNamePostfix(const char *prefix) {
     return (prefix + std::string(m_ModuleNameSimplified.empty() ? "" : "_") + m_ModuleNameSimplified);
@@ -110,16 +164,36 @@ struct DxilToRps : public ModulePass {
 
     WriteExportEntries(M);
 
+    EmitStringTableGlobal(M);
+
     return true;
   }
 
-  void InitializeBuiltinsForModule(Module &M) {
+  void EmitStringTableGlobal(Module& M) {
     static const char *StrTableId = "__rps_string_table";
-    auto StrTableGV = M.getGlobalVariable(StrTableId);
-    if (StrTableGV) {
-      std::string StrTableIdPostfixed = AddModuleNamePostfix(StrTableId);
-      StrTableGV->setName(StrTableIdPostfixed);
+
+    std::string StrTableIdPostfixed = AddModuleNamePostfix(StrTableId);
+
+    if (!m_StrTableValueString.empty()) {
+      Constant *StrConstant = ConstantDataArray::getString(
+          M.getContext(),
+          StringRef(m_StrTableValueString.data(), m_StrTableValueString.size()),
+          false);
+      GlobalVariable *RpsResourceNameTableGV = dyn_cast<GlobalVariable>(
+          M.getOrInsertGlobal(StrTableIdPostfixed, StrConstant->getType()));
+
+      RpsResourceNameTableGV->setLinkage(GlobalVariable::ExternalLinkage);
+      RpsResourceNameTableGV->setAlignment(4);
+      RpsResourceNameTableGV->setInitializer(StrConstant);
+      RpsResourceNameTableGV->setConstant(true);
+      RpsResourceNameTableGV->setDLLStorageClass(
+          llvm::GlobalValue::DLLExportStorageClass);
     }
+  }
+
+  void InitializeBuiltinsForModule(Module &M) {
+
+    m_StrTableValueString = M.GetHLModule().TakeRPSStringTable();
 
     auto voidType = Type::getVoidTy(M.getContext());
     auto intType = Type::getInt32Ty(M.getContext());
@@ -131,8 +205,7 @@ struct DxilToRps : public ModulePass {
 
     auto int8PtrType = Type::getInt8PtrTy(M.getContext());
     auto paramPushFunc =
-        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType,
-                              intType, intType, intType, nullptr);
+        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType, nullptr);
     m_RpsNodeParamPushFunc = dyn_cast<Function>(paramPushFunc);
     m_RpsNodeParamPushFunc->setLinkage(GlobalValue::ExternalLinkage);
 
@@ -179,20 +252,6 @@ struct DxilToRps : public ModulePass {
              C->getCalledFunction()->getName().str().c_str());
 #endif
     }
-  }
-
-  NodeParamTypeCategory GetNodeParamTypeCategory(Module &M, Type *pType) {
-    if (pType->isStructTy()) {
-      auto name = pType->getStructName();
-
-      if ((name == "struct.srv") || (name == "struct.rtv") ||
-          (name == "struct.uav") || (name == "struct.view")) {
-        return NodeParamTypeCategory::View;
-      } else if (name == "struct.resource") {
-        return NodeParamTypeCategory::Resource;
-      }
-    }
-    return NodeParamTypeCategory::RawBytes;
   }
 
   Function* EmitRpsExportWrapperFunction(Module &M, Function &F) {
@@ -243,7 +302,26 @@ struct DxilToRps : public ModulePass {
       Value *argTypedPtrValue = nullptr;
 
       if (dstArgTypes[i]->isPointerTy()) {
-        argTypedPtrValue = Builder.CreateBitCast(argElementPtr, dstArgTypes[i]->getPointerTo());
+        if (dstArgTypes[i]->getPointerElementType()->getStructName() == "struct.resource") {
+          // TODO: Temporary solution to translate ResourceIndex to handle
+          // Load resource index value then OR RPS_SHADER_HANDLE_TYPE_RESOURCE_BIT.
+          // Shouldn't need this after external resource refactoring & resource/view/null built-in type work.
+          static const uint32_t RPS_SHADER_HANDLE_TYPE_RESOURCE_BIT = 0x40000000;
+          auto int32Ty = Type::getInt32Ty(M.getContext());
+          auto int32PtrTy = int32Ty->getPointerTo();
+          auto asInt32Ptr = Builder.CreateBitCast(argElementPtr, int32PtrTy->getPointerTo());
+          auto resourceIndexPtrVal = Builder.CreateLoad(asInt32Ptr);
+          auto resourceIndexVal = Builder.CreateLoad(resourceIndexPtrVal);
+          auto resourceHdlVal = Builder.CreateOr(resourceIndexVal, RPS_SHADER_HANDLE_TYPE_RESOURCE_BIT);
+          auto resourceHdlValPtr = Builder.CreateAlloca(resourceHdlVal->getType());
+          auto resourceHdlPtr = Builder.CreateBitCast(resourceHdlValPtr, dstArgTypes[i]);
+          Builder.CreateStore(resourceHdlVal, resourceHdlValPtr);
+          argTypedPtrValue = Builder.CreateAlloca(dstArgTypes[i]);
+          Builder.CreateStore(resourceHdlPtr, argTypedPtrValue);
+        } else {
+          argTypedPtrValue = Builder.CreateBitCast(
+              argElementPtr, dstArgTypes[i]->getPointerTo());
+        }
       } else {
         auto argTypedPtrPtrValue = Builder.CreateBitCast(
             argElementPtr, dstArgTypes[i]->getPointerTo()->getPointerTo());
@@ -385,7 +463,7 @@ struct DxilToRps : public ModulePass {
     Instruction *firstCastInst = nullptr;
     Instruction *firstPushInst = nullptr;
 
-    uint32_t argIndex = 1;
+    uint32_t argIndex = 0;
     for (; argIter != callSite.arg_end(); argIter++, argIndex++) {
 
       auto argValue = argIter->get();
@@ -412,24 +490,8 @@ struct DxilToRps : public ModulePass {
         pArgType = dyn_cast<PointerType>(pArgType)->getElementType();
       }
 
-      ConstantInt *argSizeInBytesVal = ConstantInt::get(
-          M.getContext(),
-          APInt(32, M.getDataLayout().getTypeAllocSize(pArgType)));
-
-      NodeParamTypeCategory paramTypeCategory =
-          GetNodeParamTypeCategory(M, pArgType);
-
-      ConstantInt *paramTypeCategoryVal = ConstantInt::get(
-          M.getContext(), APInt(32, uint32_t(paramTypeCategory)));
-
-      ConstantInt *paramFlagsVal = ConstantInt::get(
-          M.getContext(),
-          APInt(32, uint32_t(nodeDefInfo.paramInfos[argIndex].flags)));
-
       auto pushInst = CallInst::Create(m_RpsNodeParamPushFunc,
-                                       {argAsBytePtrVal, argSizeInBytesVal,
-                                        paramTypeCategoryVal, paramFlagsVal},
-                                       "", callInst);
+                                       {argAsBytePtrVal}, "", callInst);
 
       firstPushInst = firstPushInst ? firstPushInst : pushInst;
     }
@@ -502,23 +564,27 @@ struct DxilToRps : public ModulePass {
               auto pFuncAnnotation = DMTypeSystem.GetFunctionAnnotation(F);
               if (pFuncAnnotation) {
                 assert(F->arg_size() == pFuncAnnotation->GetNumParameters());
-                newNode.paramInfos.resize(pFuncAnnotation->GetNumParameters());
-                auto argIter = F->arg_begin();
 
-                for (uint32_t iArg = 0; iArg < pFuncAnnotation->GetNumParameters(); iArg++) {
-                  auto &argAnnotation = pFuncAnnotation->GetParameterAnnotation(iArg);
+                auto argIter = F->arg_begin();
+                assert(argIter->hasStructRetAttr());
+
+                ++argIter;
+
+                uint32_t numParams = pFuncAnnotation->GetNumParameters() - 1;
+                newNode.paramInfos.resize(numParams);
+
+                for (uint32_t iArg = 0; iArg < numParams; iArg++, ++argIter) {
+                  auto &argAnnotation = pFuncAnnotation->GetParameterAnnotation(iArg + 1);
                   auto& currParam = newNode.paramInfos[iArg];
                   currParam.flags = argAnnotation.GetRPSAccessFlags();
                   currParam.name = argAnnotation.GetFieldName();
                   currParam.typeName = argAnnotation.GetTypeName();
-                  currParam.sizeInBytes =
-                      M.getDataLayout().getTypeAllocSize(argIter->getType());
+                  ResolveParamTypeInfo(currParam, M, argIter->getType(), argAnnotation);
                   currParam.semanticName = argAnnotation.GetSemanticString();
                   currParam.semanticIndex =
                       argAnnotation.GetSemanticIndexVec().empty()
                           ? 0
                           : argAnnotation.GetSemanticIndexVec()[0];
-                  argIter++;
                 }
               }
             } else {
@@ -529,6 +595,100 @@ struct DxilToRps : public ModulePass {
       }
     }
     return funcIndex;
+  }
+
+  RpsBasicType HLSLCompTypeToRPSType(hlsl::DXIL::ComponentType compType,
+                                     uint8_t &elementBitWidth) const {
+    switch (compType) {
+    case hlsl::DXIL::ComponentType::I1:       elementBitWidth = 8; return RpsBasicType::RPS_TYPE_BOOL;
+    case hlsl::DXIL::ComponentType::I16:      elementBitWidth = 16; return RpsBasicType::RPS_TYPE_SINT;
+    case hlsl::DXIL::ComponentType::I32:      elementBitWidth = 32; return RpsBasicType::RPS_TYPE_SINT;
+    case hlsl::DXIL::ComponentType::I64:      elementBitWidth = 64; return RpsBasicType::RPS_TYPE_SINT;
+    case hlsl::DXIL::ComponentType::U16:      elementBitWidth = 16; return RpsBasicType::RPS_TYPE_UINT;
+    case hlsl::DXIL::ComponentType::U32:      elementBitWidth = 32; return RpsBasicType::RPS_TYPE_UINT;
+    case hlsl::DXIL::ComponentType::U64:      elementBitWidth = 64; return RpsBasicType::RPS_TYPE_UINT;
+    case hlsl::DXIL::ComponentType::F16:      elementBitWidth = 16; return RpsBasicType::RPS_TYPE_FLOAT;
+    case hlsl::DXIL::ComponentType::F32:      elementBitWidth = 32; return RpsBasicType::RPS_TYPE_FLOAT;
+    case hlsl::DXIL::ComponentType::F64:      elementBitWidth = 64; return RpsBasicType::RPS_TYPE_FLOAT;
+    case hlsl::DXIL::ComponentType::SNormF16:  __fallthrough;
+    case hlsl::DXIL::ComponentType::UNormF16:  __fallthrough;
+    case hlsl::DXIL::ComponentType::SNormF32:  __fallthrough;
+    case hlsl::DXIL::ComponentType::UNormF32:  __fallthrough;
+    case hlsl::DXIL::ComponentType::SNormF64:  __fallthrough;
+    case hlsl::DXIL::ComponentType::UNormF64:  __fallthrough;
+    default:
+      assert(false && "invalid type kind");
+    }
+    return RpsBasicType::RPS_TYPE_UNKNOWN;
+  }
+
+  void ResolveParamTypeInfo(RpsNodeParamInfo &paramInfo, Module &M, Type *pType,
+                            const hlsl::DxilParameterAnnotation &annotation) {
+
+    RpsTypeInfo typeInfo = {};
+
+    typeInfo.sizeInBytes = M.getDataLayout().getTypeAllocSize(pType);
+    typeInfo.alignment = std::max(M.getDataLayout().getABITypeAlignment(pType), 4u);
+
+    // Array - Only support 1d for now. Nd array are expanded to 1d here.
+    uint32_t arrayDim = 0;
+    uint32_t numElements = 1;
+    while (pType->isArrayTy()) {
+      numElements *= pType->getArrayNumElements();
+      arrayDim++;
+
+      pType = pType->getArrayElementType();
+    }
+    typeInfo.arrayElementsOrPtr = (arrayDim > 0) ? numElements : 0;
+
+    // Pointer
+    if (pType->isPointerTy()) {
+      assert(typeInfo.arrayElementsOrPtr == 0);
+      typeInfo.arrayElementsOrPtr = UINT32_MAX;
+
+      pType = pType->getPointerElementType();
+    }
+
+    // Matrix / Vector
+    if (annotation.HasMatrixAnnotation()) {
+      typeInfo.rows = annotation.GetMatrixAnnotation().Rows;
+      typeInfo.columns = annotation.GetMatrixAnnotation().Cols;
+    }
+    else if (pType->isVectorTy()) {
+      typeInfo.columns = pType->getVectorNumElements();
+      typeInfo.rows = 0;
+
+      pType = pType->getScalarType();
+    }
+
+    // Struct
+    if (pType->isStructTy()) {
+      auto name = pType->getStructName();
+      if ((name == "struct.srv") || (name == "struct.rtv") ||
+          (name == "struct.uav") || (name == "struct.view")) {
+        typeInfo.elementType = RpsBasicType::RPS_TYPE_VIEW;
+      } else if (name == "struct.resource") {
+        typeInfo.elementType = RpsBasicType::RPS_TYPE_RESOURCE;
+      } else {
+        typeInfo.elementType = RpsBasicType::RPS_TYPE_STRUCT;
+      }
+    }
+
+    // Component
+    if (annotation.HasCompType()) {
+      typeInfo.elementType =
+          HLSLCompTypeToRPSType(annotation.GetCompType().GetKind(),
+                                typeInfo.elementBitWidth);
+    }
+
+    auto existing = m_RpsTypesLookup.find(typeInfo);
+    if (existing == m_RpsTypesLookup.end()) {
+      paramInfo.typeInfoIndex = m_RpsTypes.size();
+      m_RpsTypes.emplace_back(typeInfo);
+      m_RpsTypesLookup[typeInfo] = paramInfo.typeInfoIndex;
+    } else {
+      paramInfo.typeInfoIndex = existing->second;
+    }
   }
 
   Constant *CreateGlobalStringPtr(Module &M, StringRef Str) {
@@ -542,39 +702,140 @@ struct DxilToRps : public ModulePass {
     return ConstantExpr::getGetElementPtr(gv->getValueType(), gv, Args, true);
   }
 
-  void WriteNodeTable(Module &M) {
-    std::vector<Constant *> nodeDefConstants((m_RpsNodeInfos.size() << 1) + 1);
-
-    auto bytePtrType = llvm::Type::getInt8PtrTy(M.getContext());
-    auto nodeDefArrayType = ArrayType::get(bytePtrType, nodeDefConstants.size());
-
-    auto intType = llvm::Type::getInt32Ty(M.getContext());
-
-    for (uint32_t i = 0; i < m_RpsNodeInfos.size(); i++) {
-      uint32_t idx = i << 1;
-
-      auto demangledName = DemangleNames(m_RpsNodeInfos[i].name);
-      auto stringValue = CreateGlobalStringPtr(M, demangledName);
-
-      auto nodeFlagConstant =
-          llvm::ConstantInt::get(intType, uint64_t(m_RpsNodeInfos[i].flags));
-
-      nodeDefConstants[idx] = stringValue;
-      nodeDefConstants[idx + 1] =
-          ConstantExpr::getIntToPtr(nodeFlagConstant, bytePtrType);
+  uint32_t AppendToModuleStringTable(StringRef s) {
+    auto existing = m_StrTableEntries.find(s);
+    if (existing != m_StrTableEntries.end()) {
+      return existing->second;
     }
-    nodeDefConstants.back() = ConstantPointerNull::get(bytePtrType);
+    uint32_t offs = uint32_t(m_StrTableValueString.size());
+    m_StrTableValueString.insert(m_StrTableValueString.end(), s.data(),
+                                 s.data() + s.size());
+    m_StrTableValueString.push_back('\0');
 
-    auto arrayValue = ConstantArray::get(nodeDefArrayType, nodeDefConstants);
+    m_StrTableEntries[s] = offs;
+    return offs;
+  }
 
-    auto nodedefNameArrayVar = dyn_cast<GlobalVariable>(M.getOrInsertGlobal(
-        AddModuleNamePostfix("__rps_nodedefs"),
-        nodeDefArrayType));
-    nodedefNameArrayVar->setLinkage(GlobalVariable::ExternalLinkage);
-    nodedefNameArrayVar->setAlignment(4);
-    nodedefNameArrayVar->setInitializer(arrayValue);
-    nodedefNameArrayVar->setConstant(true);
-    nodedefNameArrayVar->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+  void WriteNodeTable(Module &M) {
+    // Metadata layout:
+    //
+    // struct RpsTypeInfo {
+    //   RpsBasicType elementType;
+    //   uint8_t elementBitWidth;
+    //   uint8_t rows;
+    //   uint8_t columns;
+    //   uint32_t arrayElementsOrPtr;
+    //   uint32_t sizeInBytes;
+    //   uint32_t alignment;
+    // };
+    // struct RpsNodeParamInfo {
+    //   uint32_t nameOffset;
+    //   uint32_t semanticName;
+    //   uint32_t semanticIndex;
+    //   uint32_t typeInfoIndex;
+    //   uint32_t flags;
+    // };
+    // struct NodeDef {
+    //     uint32_t ordinal;
+    //     uint32_t flags;
+    //     uint32_t nameOffset;
+    //     uint32_t paramsOffsetAndCount;
+    // };
+
+    static const uint32_t TYPE_INFO_SIZE_IN_DWORDS = 4;
+    static const uint32_t PARAM_METADATA_SIZE_IN_DWORDS = 5;
+    static const uint32_t NODE_METADATA_SIZE_IN_DWORDS = 4;
+
+    auto nodeMetadataSizeInDWs =
+        (m_RpsNodeInfos.size() + 1) * NODE_METADATA_SIZE_IN_DWORDS;
+
+    SmallVector<uint32_t, 256> nodeDefMetadataValues;
+    nodeDefMetadataValues.reserve(nodeMetadataSizeInDWs);
+
+    SmallVector<uint32_t, 256> paramMetadataValues;
+    uint32_t totalParamsCount = 0;
+
+    SmallVector<uint32_t, 256> typeInfoValues;
+    typeInfoValues.reserve(m_RpsTypes.size() * TYPE_INFO_SIZE_IN_DWORDS);
+
+    for (uint32_t iT = 0; iT < m_RpsTypes.size(); iT++) {
+      auto &typeInfo = m_RpsTypes[iT];
+      typeInfoValues.append({
+        (uint32_t(typeInfo.elementType) |
+         (uint32_t(typeInfo.elementBitWidth) << 8) |
+         (uint32_t(typeInfo.rows) << 16) |
+         (uint32_t(typeInfo.columns) << 24)),
+        typeInfo.arrayElementsOrPtr,
+        typeInfo.sizeInBytes,
+        typeInfo.alignment,
+      });
+    }
+
+    for (uint32_t iN = 0; iN < m_RpsNodeInfos.size(); iN++) {
+      auto &nodeInfo = m_RpsNodeInfos[iN];
+      auto demangledName = DemangleNames(m_RpsNodeInfos[iN].name);
+      auto strOffs = AppendToModuleStringTable(demangledName);
+      auto paramsOffsetAndCount =
+          (uint32_t(m_RpsNodeInfos[iN].paramInfos.size()) << 16) |
+          totalParamsCount;
+      nodeDefMetadataValues.append({
+          iN,
+          m_RpsNodeInfos[iN].flags,
+          strOffs,
+          paramsOffsetAndCount,
+      });
+
+      uint32_t paramOffset = 0;
+      for (uint32_t iP =0; iP < nodeInfo.paramInfos.size(); iP++) {
+        auto &paramInfo = nodeInfo.paramInfos[iP];
+        uint32_t nameOffset = AppendToModuleStringTable(paramInfo.name);
+        uint32_t semanticNameOffset = AppendToModuleStringTable(paramInfo.semanticName);
+        paramMetadataValues.append({
+            nameOffset,
+            semanticNameOffset,
+            paramInfo.semanticIndex,
+            paramInfo.typeInfoIndex,
+            paramInfo.flags,
+        });
+
+        paramOffset += m_RpsTypes[paramInfo.typeInfoIndex].sizeInBytes;
+        paramOffset = uint32_t(alignAddr(reinterpret_cast<const void *>(static_cast<uintptr_t>(paramOffset)), 4));
+      }
+
+      totalParamsCount += m_RpsNodeInfos[iN].paramInfos.size();
+    }
+    nodeDefMetadataValues.append({ 0xffffffffU, 0, 0, 0, });
+    paramMetadataValues.append({ 0xffffffffU, 0, 0, 0, 0, });
+
+    auto nodeDefMetadataCArr = ConstantDataArray::get(M.getContext(), nodeDefMetadataValues);
+    auto nodeDefArrayGV = dyn_cast<GlobalVariable>(
+        M.getOrInsertGlobal(AddModuleNamePostfix("__rps_nodedefs"),
+                            nodeDefMetadataCArr->getType()));
+    nodeDefArrayGV->setLinkage(GlobalVariable::ExternalLinkage);
+    nodeDefArrayGV->setAlignment(4);
+    nodeDefArrayGV->setInitializer(nodeDefMetadataCArr);
+    nodeDefArrayGV->setConstant(true);
+    nodeDefArrayGV->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+
+    auto paramsMetadataCArr = ConstantDataArray::get(M.getContext(), paramMetadataValues);
+    auto paramsMetadataGV = dyn_cast<GlobalVariable>(
+        M.getOrInsertGlobal(AddModuleNamePostfix("__rps_node_params_metadata"),
+                            paramsMetadataCArr->getType()));
+    paramsMetadataGV->setLinkage(GlobalVariable::ExternalLinkage);
+    paramsMetadataGV->setAlignment(4);
+    paramsMetadataGV->setInitializer(paramsMetadataCArr);
+    paramsMetadataGV->setConstant(true);
+    paramsMetadataGV->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
+
+    auto typeInfoCArr = ConstantDataArray::get(M.getContext(), typeInfoValues);
+    auto typeInfoGV = dyn_cast<GlobalVariable>(
+        M.getOrInsertGlobal(AddModuleNamePostfix("__rps_types_metadata"),
+                            typeInfoCArr->getType()));
+    typeInfoGV->setLinkage(GlobalVariable::ExternalLinkage);
+    typeInfoGV->setAlignment(4);
+    typeInfoGV->setInitializer(typeInfoCArr);
+    typeInfoGV->setConstant(true);
+    typeInfoGV->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
   }
 
   std::string DemangleNames(const StringRef &name) {

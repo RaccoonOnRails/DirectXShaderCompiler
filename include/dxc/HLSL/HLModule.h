@@ -251,6 +251,17 @@ public:
   // Reg binding for resource in cb.
   void AddRegBinding(unsigned CbID, unsigned ConstantIdx, unsigned Srv, unsigned Uav, unsigned Sampler);
 
+  // RPS Change Starts
+  void SetRPSStringTable(std::vector<char> &&table) {
+    m_RPSStringTable = std::move(table);
+  }
+  const std::vector<char> &GetRPSStringTable() const {
+    return m_RPSStringTable;
+  }
+  std::vector<char>&& TakeRPSStringTable() {
+    return std::move(m_RPSStringTable);
+  }
+  // RPS Change Ends
 private:
   // Signatures.
   std::vector<uint8_t> m_SerializedRootSignature;
@@ -273,6 +284,10 @@ private:
   std::unordered_map<uint64_t, unsigned> m_SrvBindingInCB;
   std::unordered_map<uint64_t, unsigned> m_UavBindingInCB;
   std::unordered_map<uint64_t, unsigned> m_SamplerBindingInCB;
+
+  // RPS Change Starts
+  std::vector<char> m_RPSStringTable;
+  // RPS Change Ends
 
 private:
   llvm::LLVMContext &m_Ctx;

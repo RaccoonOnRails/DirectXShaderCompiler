@@ -844,7 +844,7 @@ public:
   CanQualType HalfFloatTy, Min16FloatTy, Min16IntTy, Min16UIntTy;
   CanQualType HLSLStringTy;
 
-  std::string RPSResourceNames;
+  std::vector<char> RPSResourceNames;
 
   // HLSL Changes end
 

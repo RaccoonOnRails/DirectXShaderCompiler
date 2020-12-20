@@ -283,6 +283,7 @@ public:
   void MarkRetTemp(CodeGenFunction &CGF, llvm::Value *V,
                   clang::QualType QaulTy) override;
   void FinishAutoVar(CodeGenFunction &CGF, const VarDecl &D, llvm::Value *V) override;
+  void EmitRPSStringTable(ArrayRef<char> table) override; // RPS Change
 
   /// Get or add constant to the program
   HLCBuffer &GetOrCreateCBuffer(HLSLBufferDecl *D);
@@ -5786,6 +5787,12 @@ void CGMSHLSLRuntime::EmitHLSLOutParamConversionCopyBack(
       tmpArgAddr->replaceAllUsesWith(argLV.getAddress());
   }
 }
+
+// RPS Change Starts
+void CGMSHLSLRuntime::EmitRPSStringTable(ArrayRef<char> table) {
+  m_pHLModule->SetRPSStringTable(table);
+}
+// RPS Change Ends
 
 CGHLSLRuntime *CodeGen::CreateMSHLSLRuntime(CodeGenModule &CGM) {
   return new CGMSHLSLRuntime(CGM);
