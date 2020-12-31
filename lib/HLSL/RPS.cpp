@@ -655,6 +655,14 @@ struct DxilToRps : public ModulePass {
 
     RpsTypeInfo typeInfo = {};
 
+    // Pointer
+    if (pType->isPointerTy()) {
+      assert(typeInfo.arrayElementsOrPtr == 0);
+      typeInfo.arrayElementsOrPtr = UINT32_MAX;
+
+      pType = pType->getPointerElementType();
+    }
+
     typeInfo.sizeInBytes = M.getDataLayout().getTypeAllocSize(pType);
     typeInfo.alignment = std::max(M.getDataLayout().getABITypeAlignment(pType), 4u);
 
@@ -669,13 +677,8 @@ struct DxilToRps : public ModulePass {
     }
     typeInfo.arrayElementsOrPtr = (arrayDim > 0) ? numElements : 0;
 
-    // Pointer
-    if (pType->isPointerTy()) {
-      assert(typeInfo.arrayElementsOrPtr == 0);
-      typeInfo.arrayElementsOrPtr = UINT32_MAX;
-
-      pType = pType->getPointerElementType();
-    }
+    // Array of pointers are not supported.
+    assert(!pType->isPointerTy());
 
     // Matrix / Vector
     if (annotation.HasMatrixAnnotation()) {
