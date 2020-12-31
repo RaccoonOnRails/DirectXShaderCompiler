@@ -490,12 +490,25 @@ struct DxilToRps : public ModulePass {
       firstCastInst = firstCastInst ? firstCastInst : argAsBytePtrVal;
 
       const auto &paramInfo = nodeDefInfo.paramInfos[argIndex];
+      auto &typeInfo = m_RpsTypes[paramInfo.typeInfoIndex];
+
       ConstantInt *argSizeInBytesVal = ConstantInt::get(
           M.getContext(), APInt(32, uint64_t(paramInfo.alignedSizeInBytes)));
 
+      static const uint32_t indirectionFlag = 0x80000000;
+
+      // Is array or struct pointer
+      bool isIndirection =
+          ((typeInfo.arrayElementsOrPtr != 0) &&
+           (typeInfo.arrayElementsOrPtr != UINT32_MAX)) ||
+          (typeInfo.elementType == RpsBasicType::RPS_TYPE_STRUCT) ||
+          (typeInfo.elementType == RpsBasicType::RPS_TYPE_RESOURCE) ||
+          (typeInfo.elementType == RpsBasicType::RPS_TYPE_VIEW);
+
       ConstantInt *paramTypeBaseVal = ConstantInt::get(
-          M.getContext(),
-          APInt(32, uint32_t(m_RpsTypes[paramInfo.typeInfoIndex].elementType)));
+          M.getContext(), APInt(32,
+              uint32_t(m_RpsTypes[paramInfo.typeInfoIndex].elementType) |
+              (isIndirection ? indirectionFlag : 0)));
 
       ConstantInt *paramFlagsVal = ConstantInt::get(
           M.getContext(), APInt(32, uint32_t(paramInfo.flags)));
