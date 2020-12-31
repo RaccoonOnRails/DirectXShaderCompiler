@@ -111,9 +111,12 @@ struct DxilToRps : public ModulePass {
     uint32_t semanticIndex;
     uint32_t typeInfoIndex;
     uint32_t flags;
+    uint16_t alignedSizeInBytes;
+    uint16_t offsetInBytes;
 
     RpsNodeParamInfo()
-        : semanticIndex(0), typeInfoIndex(UINT32_MAX), flags(0) {}
+        : semanticIndex(0), typeInfoIndex(UINT32_MAX),
+          flags(0), alignedSizeInBytes(0), offsetInBytes(0) {}
   };
 
   struct RpsNodeDefInfo {
@@ -205,7 +208,8 @@ struct DxilToRps : public ModulePass {
 
     auto int8PtrType = Type::getInt8PtrTy(M.getContext());
     auto paramPushFunc =
-        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType, nullptr);
+        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType,
+                              intType, intType, intType, nullptr);
     m_RpsNodeParamPushFunc = dyn_cast<Function>(paramPushFunc);
     m_RpsNodeParamPushFunc->setLinkage(GlobalValue::ExternalLinkage);
 
@@ -485,13 +489,20 @@ struct DxilToRps : public ModulePass {
 
       firstCastInst = firstCastInst ? firstCastInst : argAsBytePtrVal;
 
-      Type *pArgType = argValue->getType();
-      if (pArgType->isPointerTy()) {
-        pArgType = dyn_cast<PointerType>(pArgType)->getElementType();
-      }
+      const auto &paramInfo = nodeDefInfo.paramInfos[argIndex];
+      ConstantInt *argSizeInBytesVal = ConstantInt::get(
+          M.getContext(), APInt(32, uint64_t(paramInfo.alignedSizeInBytes)));
+
+      ConstantInt *paramTypeBaseVal = ConstantInt::get(
+          M.getContext(),
+          APInt(32, uint32_t(m_RpsTypes[paramInfo.typeInfoIndex].elementType)));
+
+      ConstantInt *paramFlagsVal = ConstantInt::get(
+          M.getContext(), APInt(32, uint32_t(paramInfo.flags)));
 
       auto pushInst = CallInst::Create(m_RpsNodeParamPushFunc,
-                                       {argAsBytePtrVal}, "", callInst);
+          { argAsBytePtrVal, argSizeInBytesVal, paramTypeBaseVal, paramFlagsVal },
+          "", callInst);
 
       firstPushInst = firstPushInst ? firstPushInst : pushInst;
     }
@@ -573,6 +584,8 @@ struct DxilToRps : public ModulePass {
                 uint32_t numParams = pFuncAnnotation->GetNumParameters() - 1;
                 newNode.paramInfos.resize(numParams);
 
+                uint32_t paramOffset = 0;
+
                 for (uint32_t iArg = 0; iArg < numParams; iArg++, ++argIter) {
                   auto &argAnnotation = pFuncAnnotation->GetParameterAnnotation(iArg + 1);
                   auto& currParam = newNode.paramInfos[iArg];
@@ -585,6 +598,21 @@ struct DxilToRps : public ModulePass {
                       argAnnotation.GetSemanticIndexVec().empty()
                           ? 0
                           : argAnnotation.GetSemanticIndexVec()[0];
+
+                  const uint32_t paramSizeInBytes =
+                      m_RpsTypes[currParam.typeInfoIndex].sizeInBytes;
+                  assert(paramSizeInBytes < UINT16_MAX);
+
+                  currParam.offsetInBytes = paramOffset;
+
+                  paramOffset += paramSizeInBytes;
+                  // TODO: Per-param alignment.
+                  paramOffset = uint32_t(
+                      alignAddr(reinterpret_cast<const void *>(static_cast<uintptr_t>(paramOffset)), 4));
+
+                  assert(paramOffset <= UINT16_MAX);
+
+                  currParam.alignedSizeInBytes = paramOffset - currParam.offsetInBytes;
                 }
               }
             } else {
@@ -733,6 +761,8 @@ struct DxilToRps : public ModulePass {
     //   uint32_t semanticName;
     //   uint32_t semanticIndex;
     //   uint32_t typeInfoIndex;
+    //   uint16_t alignedSizeInBytes;
+    //   uint16_t byteOffset;
     //   uint32_t flags;
     // };
     // struct NodeDef {
@@ -785,27 +815,26 @@ struct DxilToRps : public ModulePass {
           paramsOffsetAndCount,
       });
 
-      uint32_t paramOffset = 0;
       for (uint32_t iP =0; iP < nodeInfo.paramInfos.size(); iP++) {
         auto &paramInfo = nodeInfo.paramInfos[iP];
-        uint32_t nameOffset = AppendToModuleStringTable(paramInfo.name);
-        uint32_t semanticNameOffset = AppendToModuleStringTable(paramInfo.semanticName);
+        const uint32_t nameOffset = AppendToModuleStringTable(paramInfo.name);
+        const uint32_t semanticNameOffset = AppendToModuleStringTable(paramInfo.semanticName);
+
         paramMetadataValues.append({
             nameOffset,
             semanticNameOffset,
             paramInfo.semanticIndex,
             paramInfo.typeInfoIndex,
+            uint32_t(paramInfo.offsetInBytes) | (uint32_t(paramInfo.alignedSizeInBytes) << 16u),
             paramInfo.flags,
         });
-
-        paramOffset += m_RpsTypes[paramInfo.typeInfoIndex].sizeInBytes;
-        paramOffset = uint32_t(alignAddr(reinterpret_cast<const void *>(static_cast<uintptr_t>(paramOffset)), 4));
       }
 
       totalParamsCount += m_RpsNodeInfos[iN].paramInfos.size();
     }
     nodeDefMetadataValues.append({ 0xffffffffU, 0, 0, 0, });
     paramMetadataValues.append({ 0xffffffffU, 0, 0, 0, 0, });
+    typeInfoValues.append({ 0xffffffffU, 0, 0, 0, });
 
     auto nodeDefMetadataCArr = ConstantDataArray::get(M.getContext(), nodeDefMetadataValues);
     auto nodeDefArrayGV = dyn_cast<GlobalVariable>(
