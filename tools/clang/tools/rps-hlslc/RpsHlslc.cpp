@@ -518,6 +518,8 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
 
   arguments.push_back(L"-Qembed_debug");
 
+  arguments.push_back(L"-Od");
+
 #if RPS_DEBUG_AST_DUMP
   arguments.push_back(L"-ast-dump");
 #endif //RPS_DEBUG_AST_DUMP
@@ -687,7 +689,7 @@ int main(const int argc, const char *argv[]) {
 
   if (OutputCbe.getValue()) {
     std::string cbeCmd = "\"\"" + currExecDir + "/llvm-cbe.exe\" \"" +
-                         tmpRpsLLFile + "\" -o \"" +
+                         tmpRpsLLFile + "\" -O0 -o \"" +
                          OutputFileDirectoryAndStem + ".rpsl.g.c\"\"";
     result = system(cbeCmd.c_str());
   }
