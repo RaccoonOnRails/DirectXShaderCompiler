@@ -10515,6 +10515,16 @@ CasesHandled: // HLSL Change: minimize code changes by avoiding a branch above
   else if (const ObjCIvarRefExpr *OIRE =
            dyn_cast<ObjCIvarRefExpr>(LHS.get()->IgnoreParenCasts()))
     DiagnoseDirectIsaAccess(*this, OIRE, OpLoc, RHS.get());
+
+  // RPS Change Starts
+  if (getLangOpts().IsRPS && (Opc == BO_NE || Opc == BO_EQ)) {
+    ExprResult result = hlsl::HandleBinaryOpForRPS(*this, LHS.get(), RHS.get(), OpLoc, Opc);
+    if (!result.isInvalid())
+    {
+      return result;
+    }
+  }
+  // RPS Change Ends
   
   if (CompResultTy.isNull())
     return new (Context) BinaryOperator(LHS.get(), RHS.get(), Opc, ResultTy, VK,

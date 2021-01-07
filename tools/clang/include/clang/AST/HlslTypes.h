@@ -305,6 +305,8 @@ clang::CXXRecordDecl* DeclareRecordTypeWithHandle(
 void AddRaytracingConstants(clang::ASTContext& context);
 void AddSamplerFeedbackConstants(clang::ASTContext& context);
 
+void AddRPSConstants(clang::ASTContext &context); // RPS Change
+
 /// <summary>Adds the implementation for std::is_equal.</summary>
 void AddStdIsEqualImplementation(clang::ASTContext& context, clang::Sema& sema);
 

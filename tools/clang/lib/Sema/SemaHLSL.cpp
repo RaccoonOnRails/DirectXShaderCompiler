@@ -208,6 +208,12 @@ enum ArBasicKind {
 
   // Resource
   AR_OBJECT_RESOURCE,
+
+  // RPS
+  AR_OBJECT_RPS_NULLHANDLE,
+  AR_OBJECT_RPS_RESOURCE,
+  AR_OBJECT_RPS_VIEW,
+
   AR_BASIC_MAXIMUM_COUNT
 };
 
@@ -492,6 +498,13 @@ const UINT g_uBasicKindProps[] =
 
   0,      //AR_OBJECT_RAY_QUERY,
   0,      //AR_OBJECT_RESOURCE,
+
+  // RPS Change Starts
+  BPROP_OBJECT,                     //AR_OBJECT_RPS_NULLHANDLE,
+  BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_RESOURCE,
+  BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_VIEW,
+  // RPS Change Ends
+
   // AR_BASIC_MAXIMUM_COUNT
 };
 
@@ -1329,6 +1342,12 @@ const ArBasicKind g_ArBasicKindsAsTypes[] =
 
   AR_OBJECT_RAY_QUERY,
   AR_OBJECT_RESOURCE,
+
+  // RPS Change Starts
+  AR_OBJECT_RPS_NULLHANDLE,
+  AR_OBJECT_RPS_RESOURCE,
+  AR_OBJECT_RPS_VIEW,
+  // RPS Change Ends
 };
 
 // Count of template arguments for basic kind of objects that look like templates (one or more type arguments).
@@ -1415,6 +1434,12 @@ const uint8_t g_ArBasicKindsTemplateCount[] =
 
   1, // AR_OBJECT_RAY_QUERY,
   0, // AR_OBJECT_RESOURCE,
+
+  // RPS Change Starts
+  0, // AR_OBJECT_RPS_NULLHANDLE,
+  0, // AR_OBJECT_RPS_RESOURCE,
+  0, // AR_OBJECT_RPS_VIEW,
+  // RPS Change Ends
 };
 
 C_ASSERT(_countof(g_ArBasicKindsAsTypes) == _countof(g_ArBasicKindsTemplateCount));
@@ -1511,6 +1536,12 @@ const SubscriptOperatorRecord g_ArBasicKindsSubscripts[] =
 
   { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RAY_QUERY,
   { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RESOURCE,
+
+  // RPS Change Begins
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_NULLHANDLE,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_RESOURCE,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_VIEW,
+  // RPS Change Ends
 };
 
 C_ASSERT(_countof(g_ArBasicKindsAsTypes) == _countof(g_ArBasicKindsSubscripts));
@@ -1631,6 +1662,12 @@ const char* g_ArBasicTypeNames[] =
 
   "RayQuery",
   "Resource",
+
+  // RPS Change Starts
+  "null_t",
+  "resource",
+  "view",
+  // RPS Change Ends
 };
 
 C_ASSERT(_countof(g_ArBasicTypeNames) == AR_BASIC_MAXIMUM_COUNT);
@@ -3516,6 +3553,8 @@ public:
     for (auto && intrinsic : m_intrinsicTables) {
       AddIntrinsicTableMethods(intrinsic);
     }
+
+    AddRPSBuiltinObjects();
   }
 
   void ForgetSema() override
@@ -4081,6 +4120,11 @@ public:
     case AR_OBJECT_ACCELERATION_STRUCT:
     case AR_OBJECT_RAY_DESC:
     case AR_OBJECT_TRIANGLE_INTERSECTION_ATTRIBUTES:
+    // RPS Change Starts
+    case AR_OBJECT_RPS_NULLHANDLE:
+    case AR_OBJECT_RPS_RESOURCE:
+    case AR_OBJECT_RPS_VIEW:
+    // RPS Change Ends
     {
         const ArBasicKind* match = std::find(g_ArBasicKindsAsTypes, &g_ArBasicKindsAsTypes[_countof(g_ArBasicKindsAsTypes)], kind);
         DXASSERT(match != &g_ArBasicKindsAsTypes[_countof(g_ArBasicKindsAsTypes)], "otherwise can't find constant in basic kinds");
@@ -4331,6 +4375,8 @@ public:
     AddRaytracingConstants(*m_context);
     AddSamplerFeedbackConstants(*m_context);
 
+    AddRPSConstants(*m_context); // RPS Change
+
     return true;
   }
 
@@ -4516,6 +4562,16 @@ public:
       _In_ TypeSpecifierSign TSS,
       _In_ SourceLocation Loc
   );
+
+  // RPS Change Starts
+
+  clang::ExprResult HandleBinaryOpForRPS(
+      _In_ clang::SourceLocation OpLoc,
+      _In_ clang::BinaryOperatorKind Opc,
+      _In_ clang::Expr *LHS,
+      _In_ clang::Expr *RHS);
+
+  // RPS Change Ends
 
   bool CheckRangedTemplateArgument(SourceLocation diagLoc, llvm::APSInt& sintValue)
   {
@@ -4773,10 +4829,72 @@ public:
       startDepth = 1;
     }
 
+    // RPS Change Starts
+    if ((kind == AR_OBJECT_RPS_RESOURCE) || (kind == AR_OBJECT_RPS_VIEW)) {
+       //AddRpsViewSlicingSubscripts(kind, typeDecl, recordDecl);
+    }
+    // RPS Change Ends
+
     AddObjectMethods(kind, recordDecl, startDepth);
     // Clear the object.
     m_objectTypeLazyInitMask &= ~bit;
   }
+
+  // RPS Change Starts
+  void AddRPSBuiltinObjects() {
+    DeclContext *DC = m_context->getTranslationUnitDecl();
+
+    // Declare null: null_t null;
+    QualType nullHandleType = GetBasicKindType(AR_OBJECT_RPS_NULLHANDLE);
+    IdentifierInfo &Id = m_context->Idents.get("null");
+    VarDecl *varDecl =
+        VarDecl::Create(*m_context, DC, NoLoc, NoLoc, &Id, nullHandleType,
+                        m_context->getTrivialTypeSourceInfo(nullHandleType),
+                        StorageClass::SC_Static);
+
+    Expr *zeroLiteral = IntegerLiteral::Create(
+        *m_context, llvm::APInt(32, 0ULL),
+        m_context->getIntTypeForBitwidth(32, true), NoLoc);
+
+    Expr *exprVal =
+        ImplicitCastExpr::Create(*m_context, nullHandleType, CK_FlatConversion,
+                                 zeroLiteral, nullptr, VK_RValue);
+
+    varDecl->setInit(exprVal);
+    varDecl->setImplicit(true);
+    DC->addDecl(varDecl);
+
+    //
+    QualType resourceType = GetBasicKindType(AR_OBJECT_RPS_RESOURCE);
+    QualType viewType = GetBasicKindType(AR_OBJECT_RPS_VIEW);
+
+    QualType boolType = m_baseTypes[HLSLScalarType_bool];
+
+    FunctionProtoType::ExtProtoInfo protoInfo = clang::FunctionProtoType::ExtProtoInfo();
+    std::vector<ParameterModifier> paramModifier = {
+        hlsl::ParameterModifier(hlsl::ParameterModifier::Kind::In),
+        hlsl::ParameterModifier(hlsl::ParameterModifier::Kind::In),
+    };
+
+    QualType viewCompareFuncType = m_context->getFunctionType(
+        boolType, ArrayRef<QualType>({viewType, viewType}), protoInfo,
+        paramModifier);
+
+    FunctionDecl *viewNotEqualFunc = FunctionDecl::Create(
+        *m_context, DC, NoLoc, NoLoc,
+        m_context->DeclarationNames.getCXXOperatorName(OO_ExclaimEqual),
+        viewCompareFuncType, nullptr, SC_Extern, false, false);
+
+    QualType viewNullCompareFuncType = m_context->getFunctionType(
+        boolType, ArrayRef<QualType>({viewType, nullHandleType}), protoInfo,
+        paramModifier);
+
+    FunctionDecl *viewNullNotEqualFunc = FunctionDecl::Create(
+        *m_context, DC, NoLoc, NoLoc,
+        m_context->DeclarationNames.getCXXOperatorName(OO_ExclaimEqual),
+        viewNullCompareFuncType, nullptr, SC_Extern, false, false);
+  }
+  // RPS Change Ends
 
   FunctionDecl* AddHLSLIntrinsicMethod(
     LPCSTR tableName,
@@ -8447,6 +8565,16 @@ bool HLSLExternalSource::CanConvert(
     }
   }
 
+  // RPS Change Starts
+  if (SourceInfo.EltKind == AR_OBJECT_RPS_NULLHANDLE) {
+    if ((TargetInfo.EltKind == AR_OBJECT_RPS_RESOURCE) ||
+        (TargetInfo.EltKind == AR_OBJECT_RPS_VIEW)) {
+      Second = ICK_Flat_Conversion;
+      goto lSuccess;
+    }
+  }
+  // RPS Change Ends
+
   // Convert scalar/vector/matrix dimensions
   if (!ConvertDimensions(TargetInfo, SourceInfo, Second, Remarks))
     return false;
@@ -8711,6 +8839,62 @@ void HLSLExternalSource::CheckBinOpForHLSL(
     // In the HLSL case these cases don't apply or simply aren't surfaced.
     ResultTy = RHS.get()->getType();
     return;
+  // RPS Change Starts
+  case BO_EQ:
+  case BO_NE:
+    if (getSema()->getLangOpts().IsRPS) {
+
+      QualType lhsType = LHS.get()->getType();
+      QualType rhsType = RHS.get()->getType();
+      if ((AR_TOBJ_OBJECT != GetTypeObjectKind(lhsType)) ||
+          (AR_TOBJ_OBJECT != GetTypeObjectKind(rhsType))) {
+        break;
+      }
+
+      ArBasicKind lhsKind = GetTypeElementKind(lhsType);
+      ArBasicKind rhsKind = GetTypeElementKind(rhsType);
+
+      // RPS Handles
+      if (((lhsKind >= AR_OBJECT_RPS_NULLHANDLE) && (lhsKind <= AR_OBJECT_RPS_VIEW)) &&
+          ((rhsKind >= AR_OBJECT_RPS_NULLHANDLE) && (rhsKind <= AR_OBJECT_RPS_VIEW))) {
+
+        if ((lhsKind != AR_OBJECT_RPS_NULLHANDLE) && (rhsKind != AR_OBJECT_RPS_NULLHANDLE) &&
+            (lhsKind != rhsKind))
+        {
+          m_sema->Diag(OpLoc, diag::err_rps_general);
+          assert(ResultTy.isNull());
+          return;
+        } else {
+          ResultTy = m_baseTypes[HLSLScalarType_bool];
+
+          QualType uint32Type = GetBasicKindType(AR_BASIC_UINT32);
+
+          if (lhsKind != AR_OBJECT_RPS_NULLHANDLE) {
+            LHS = CStyleCastExpr::Create(
+                *m_context, uint32Type, VK_RValue, CK_FlatConversion, LHS.get(),
+                nullptr, m_context->getTrivialTypeSourceInfo(uint32Type, NoLoc),
+                OpLoc, OpLoc);
+          } else {
+            LHS = IntegerLiteral::Create(*m_context, llvm::APInt(32, 0ULL),
+                                         uint32Type, LHS.get()->getExprLoc());
+          }
+
+          if (rhsKind != AR_OBJECT_RPS_NULLHANDLE) {
+            RHS = CStyleCastExpr::Create(
+                *m_context, uint32Type, VK_RValue, CK_FlatConversion, RHS.get(),
+                nullptr, m_context->getTrivialTypeSourceInfo(uint32Type, NoLoc),
+                OpLoc, OpLoc);
+          } else {
+            RHS = IntegerLiteral::Create(*m_context, llvm::APInt(32, 0ULL),
+                                         uint32Type, RHS.get()->getExprLoc());
+          }
+
+          return;
+        }
+      }
+    }
+    break;
+  // RPS Change Ends
   default:
     // Only assign and comma operations handled.
     break;
@@ -9159,6 +9343,19 @@ clang::QualType HLSLExternalSource::CheckVectorConditional(
 
   return ResultTy;
 }
+
+// RPS Change Starts
+
+clang::ExprResult HLSLExternalSource::HandleBinaryOpForRPS(
+    _In_ clang::SourceLocation OpLoc,
+    _In_ clang::BinaryOperatorKind Opc,
+    _In_ clang::Expr *LHS,
+    _In_ clang::Expr *RHS)
+{
+  return ExprResult(true);
+}
+
+// RPS Change Ends
 
 // Apply type specifier sign to the given QualType.
 // Other than privmitive int type, only allow shorthand vectors and matrices to be unsigned.
@@ -9669,6 +9866,26 @@ void hlsl::CheckBinOpForHLSL(Sema& self,
   HLSLExternalSource* hlsl = reinterpret_cast<HLSLExternalSource*>(externalSource);
   return hlsl->CheckBinOpForHLSL(OpLoc, Opc, LHS, RHS, ResultTy, CompLHSTy, CompResultTy);
 }
+
+// RPS Change Starts
+clang::ExprResult hlsl::HandleBinaryOpForRPS(
+  _In_ clang::Sema &self,
+  _In_ clang::Expr *LHS,
+  _In_ clang::Expr *RHS,
+  _In_ clang::SourceLocation OpLoc,
+  _In_ clang::BinaryOperatorKind Opc)
+{
+  ExternalSemaSource *externalSource = self.getExternalSource();
+  if (externalSource == nullptr) {
+    return ExprResult(true);
+  }
+
+  HLSLExternalSource *hlsl =
+      reinterpret_cast<HLSLExternalSource *>(externalSource);
+  return hlsl->HandleBinaryOpForRPS(OpLoc, Opc, LHS, RHS);
+}
+
+// RPS Change Ends
 
 /// <summary>Performs HLSL-specific processing of template declarations.</summary>
 bool hlsl::CheckTemplateArgumentListForHLSL(Sema& self, TemplateDecl* Template, SourceLocation TemplateLoc, TemplateArgumentListInfo& TemplateArgList)

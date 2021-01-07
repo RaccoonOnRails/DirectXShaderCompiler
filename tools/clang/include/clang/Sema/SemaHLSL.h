@@ -254,6 +254,17 @@ clang::QualType CheckVectorConditional(
   _In_ clang::ExprResult &RHS,
   _In_ clang::SourceLocation QuestionLoc);
 
+// RPS Change Starts
+
+clang::ExprResult HandleBinaryOpForRPS(
+  _In_ clang::Sema& self,
+  _In_ clang::Expr* LHS,
+  _In_ clang::Expr* RHS,
+  _In_ clang::SourceLocation OpLoc,
+  _In_ clang::BinaryOperatorKind Opc);
+
+// RPS Change Ends
+
 }
 
 bool IsTypeNumeric(_In_ clang::Sema* self, _In_ clang::QualType &type);

@@ -108,14 +108,6 @@ struct nodeidentifier { uint unused; };
 uint __rps_asyncmarker();
 #define async __rps_asyncmarker();
 
-#define __RPS_DECL_HANDLE(X) struct X { uint _value; };
-__RPS_DECL_HANDLE(resource);
-__RPS_DECL_HANDLE(view);
-
-struct __rps_null_type { uint _value; };
-#define null ((__rps_null_type)0)
-inline bool is_null( __rps_null_type r ) { return r._value == 0; }
-
 resource __rps_set_resource_name(resource r, uint nameOffset, uint nameLength);
 
 // Syntax sugars

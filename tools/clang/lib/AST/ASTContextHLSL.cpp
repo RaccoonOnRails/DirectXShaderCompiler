@@ -479,6 +479,12 @@ void hlsl::AddSamplerFeedbackConstants(ASTContext& context) {
   AddConstUInt(context, StringRef("SAMPLER_FEEDBACK_MIP_REGION_USED"), (unsigned)DXIL::SamplerFeedbackType::MipRegionUsed);
 }
 
+// RPS Change Starts
+void hlsl::AddRPSConstants(clang::ASTContext& context) {
+  // TODO: Move RPS builtin constants here.
+}
+// RPS Change Ends
+
 static
 Expr* IntConstantAsBoolExpr(clang::Sema& sema, uint64_t value)
 {
