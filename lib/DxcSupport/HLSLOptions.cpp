@@ -134,9 +134,15 @@ bool DxcOpts::IsRootSignatureProfile() {
       TargetProfile == "rootsig_1_1";
 }
 
+// RPS Change Starts
+bool DxcOpts::IsRPSProfile() {
+  return TargetProfile.startswith("rps_");
+}
+// RPS Change Ends
+
 bool DxcOpts::IsLibraryProfile() {
   return TargetProfile.startswith("lib_") ||  // RPS Change
-      TargetProfile.startswith("rps_");       // RPS Change
+         IsRPSProfile();                      // RPS Change
 }
 
 bool DxcOpts::IsDebugInfoEnabled() {

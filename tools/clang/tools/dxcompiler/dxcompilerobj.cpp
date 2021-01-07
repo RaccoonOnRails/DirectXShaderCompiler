@@ -651,6 +651,7 @@ public:
           rootSigMinor = 0;
         }
         compiler.getLangOpts().IsHLSLLibrary = opts.IsLibraryProfile();
+        compiler.getLangOpts().IsRPS = opts.IsRPSProfile(); // RPS Change
 
         // Clear entry function if library target
         if (compiler.getLangOpts().IsHLSLLibrary)

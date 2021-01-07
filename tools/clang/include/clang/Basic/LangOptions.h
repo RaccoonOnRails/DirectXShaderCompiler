@@ -159,6 +159,7 @@ public:
   bool EnableDX9CompatMode;
   bool EnableFXCCompatMode;
   // HLSL Change Ends
+  bool IsRPS; // RPS Change
 
   bool SPIRV = false;  // SPIRV Change
   

@@ -194,6 +194,7 @@ public:
 
   bool IsRootSignatureProfile();
   bool IsLibraryProfile();
+  bool IsRPSProfile(); // RPS Change
 
   // Helpers to clarify interpretation of flags for behavior in implementation
   bool IsDebugInfoEnabled();    // Zi
