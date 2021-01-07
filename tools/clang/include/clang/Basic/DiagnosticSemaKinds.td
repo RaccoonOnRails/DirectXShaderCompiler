@@ -7699,6 +7699,11 @@ def err_hlsl_out_indices_array_incorrect_access: Error<
 def err_hlsl_vulkan_specific_feature: Error<"%0 is a Vulkan specific feature">;
 // SPIRV Change Ends
 
+// RPS Change Starts
+// Place holder RPS error:
+def err_rps_general : Error<"General RPS error: %0">;
+// RPS Change Ends
+
 let CategoryName = "OpenMP Issue" in {
 // OpenMP support.
 def err_omp_expected_var_arg : Error<
