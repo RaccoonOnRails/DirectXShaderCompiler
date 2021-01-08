@@ -67,6 +67,8 @@ static cl::opt<bool> DumpRpsIL("rpsll",
                                cl::desc("Dump processed LLVM IL text (RPS transform pass output)"),
                                cl::init(false));
 
+static cl::opt<bool> DumpCFG("dot-cfg", cl::desc("Dump CFG"), cl::init(false));
+
 static std::string OutputFileStem;
 static std::string OutputFileDirectoryAndStem;
 
@@ -559,6 +561,56 @@ ComPtr<IDxcBlob> CompileHlslToDxilContainer(const char *fileName) {
     fclose(fp);
     return nullptr;
 #endif // RPS_DEBUG_AST_DUMP
+
+    if (DumpCFG) {
+      ComPtr<IDxcOptimizer> pOptimizer;
+      if (SUCCEEDED(g_pfnDxcCreateInstance(CLSID_DxcOptimizer,
+                                           IID_PPV_ARGS(&pOptimizer)))) {
+
+        std::vector<LPCWSTR> optArgs;
+        optArgs.push_back(L"-dot-cfg");
+
+        ComPtr<IDxcBlob> pOptimizerIn, pOptimizerOut;
+
+        ComPtr<IDxcContainerReflection> pReflection;
+        if (SUCCEEDED(g_pfnDxcCreateInstance(CLSID_DxcContainerReflection,
+                                             IID_PPV_ARGS(&pReflection)))) {
+          if (SUCCEEDED(pReflection->Load(pContainer.Get()))) {
+            UINT32 numParts = 0;
+            if (SUCCEEDED(pReflection->GetPartCount(&numParts))) {
+              for (UINT iPart = 0; iPart < numParts; iPart++) {
+                UINT kind;
+                if (SUCCEEDED(pReflection->GetPartKind(iPart, &kind)) &&
+                    (kind == 'LIXD')) {
+                  pReflection->GetPartContent(iPart, &pOptimizerIn);
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (pOptimizerIn) {
+          ComPtr<IDxcBlobEncoding> pOptimizerOutText;
+          pOptimizer->RunOptimizer(pOptimizerIn.Get(), optArgs.data(),
+                                   UINT32(optArgs.size()), &pOptimizerOut,
+                                   &pOptimizerOutText);
+
+          if (pOptimizerOutText) {
+            ComPtr<IDxcBlobEncoding> pCfgDumpUtf8;
+            pLibrary->GetBlobAsUtf8(pOptimizerOutText.Get(), &pCfgDumpUtf8);
+
+            fp = {};
+            fopen_s(&fp, (std::string(fileName) + ".cfg.dot").c_str(), "wb");
+            if (fp) {
+              fwrite(pCfgDumpUtf8->GetBufferPointer(), 1,
+                     pCfgDumpUtf8->GetBufferSize(), fp);
+            }
+            fclose(fp);
+          }
+        }
+      }
+    }
 
     if (DumpOriginalIL || DumpOriginalILBin) {
       ComPtr<IDxcBlobEncoding> pDisasm;
