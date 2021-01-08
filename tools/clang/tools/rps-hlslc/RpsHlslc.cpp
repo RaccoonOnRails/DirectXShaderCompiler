@@ -288,6 +288,7 @@ ResourceDesc     describe_resource( resource r );
 ResourceViewDesc describe_view    ( view v );
 resource         create_resource  ( ResourceDesc desc );
 view             create_view      ( resource r, ResourceViewDesc desc );
+view             create_default_view( resource r );
 void             clear_view       ( view v, rps::clear option, uint4 data );
 
 inline resource create_tex2d( rps::format format, uint width, uint height, uint numMips = 1, uint arraySlices = 1, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0, rps::resource_flags flags = rps::resource_flags::none )

@@ -142,6 +142,9 @@ ImplicitConversionRank clang::GetConversionRank(ImplicitConversionKind Kind) {
     ICR_Conversion,
     ICR_Conversion,
     // HLSL Change Ends
+    // RPS Change Starts
+    ICR_Conversion,
+    // RPS Change Ends
   };
   static_assert(_countof(Rank) == ICK_Num_Conversion_Kinds,
       "Otherwise, GetConversionRank is out of sync with ImplicitConversionKind"); // HLSL Change
@@ -187,6 +190,9 @@ static const char* GetImplicitConversionName(ImplicitConversionKind Kind) {
     "HLSLVector/Matrix truncation",
     "HLSL derived to base",
     // HLSL Change Ends
+    // RPS Change Starts
+    "RPS resource handle to view handle",
+    // RPS Change Ends
   };
   static_assert(_countof(Name) == ICK_Num_Conversion_Kinds,
     "Otherwise, GetImplicitConversionName is out of sync with ImplicitConversionKind"); // HLSL Change

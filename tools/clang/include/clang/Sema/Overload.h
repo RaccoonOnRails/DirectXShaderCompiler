@@ -99,6 +99,10 @@ namespace clang {
     ICK_HLSL_Derived_To_Base,  ///< HLSL Derived-to-base
     // HLSL Change Ends
 
+    // RPS Change Starts
+    ICK_RPS_ResourceToView,
+    // RPS Change Ends
+
     ICK_Num_Conversion_Kinds   ///< The number of conversion kinds
   };
 

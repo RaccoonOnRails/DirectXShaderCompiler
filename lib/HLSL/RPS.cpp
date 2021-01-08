@@ -223,10 +223,12 @@ struct DxilToRps : public ModulePass {
     m_ModuleIdGlobal->setDLLStorageClass(
         llvm::GlobalValue::DLLExportStorageClass);
 
+    // TODO: Make these intrinsic
     m_RpsLibFuncs.insert(std::make_pair("describe_resource", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("describe_view", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("create_resource", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("create_view", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("create_default_view", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("clear_view", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("__rps_set_resource_name", nullptr));
 

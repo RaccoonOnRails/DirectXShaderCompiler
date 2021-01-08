@@ -7994,6 +7994,17 @@ clang::ExprResult HLSLExternalSource::PerformHLSLConversion(
       }
       break;
     }
+    // RPS Change Starts
+    case ICK_RPS_ResourceToView: {
+      assert(SourceInfo.ShapeKind == AR_TOBJ_OBJECT);
+      assert(TargetInfo.ShapeKind == AR_TOBJ_OBJECT);
+      assert(SourceInfo.ObjKind == AR_OBJECT_RPS_RESOURCE);
+      assert(TargetInfo.ObjKind == AR_OBJECT_RPS_VIEW);
+      From = m_sema->ImpCastRPSResourceToView(From).get();
+      break;
+    }
+    // RPS Change Ends
+
     case ICK_Identity:
       // Nothing to do.
       break;
@@ -8535,12 +8546,17 @@ bool HLSLExternalSource::CanConvert(
   }
 
   // RPS Change Starts
-  if (SourceInfo.EltKind == AR_OBJECT_RPS_NULLHANDLE) {
-    if ((TargetInfo.EltKind == AR_OBJECT_RPS_RESOURCE) ||
-        (TargetInfo.EltKind == AR_OBJECT_RPS_VIEW)) {
-      Second = ICK_Flat_Conversion;
-      goto lSuccess;
-    }
+  if ((SourceInfo.ObjKind == AR_OBJECT_RPS_NULLHANDLE) &&
+      ((TargetInfo.ObjKind == AR_OBJECT_RPS_RESOURCE) ||
+       (TargetInfo.ObjKind == AR_OBJECT_RPS_VIEW))) {
+    Second = ICK_Flat_Conversion;
+    goto lSuccess;
+  }
+
+  if ((SourceInfo.ObjKind == AR_OBJECT_RPS_RESOURCE) &&
+      (TargetInfo.ObjKind == AR_OBJECT_RPS_VIEW)) {
+    Second = ICK_RPS_ResourceToView;
+    goto lSuccess;
   }
   // RPS Change Ends
 
@@ -11357,6 +11373,23 @@ ExprResult Sema::ActOnRPSNullHandle(SourceLocation KwLoc) {
   HLSLExternalSource *hlslSource = HLSLExternalSource::FromSema(this);
   return hlslSource->BuildRPSNullHandleForKind(AR_OBJECT_RPS_NULLHANDLE);
 }
+
+ExprResult Sema::ImpCastRPSResourceToView(Expr* From) {
+  CXXScopeSpec SS;
+  UnqualifiedId Name;
+  Name.setIdentifier(PP.getIdentifierInfo("create_default_view"),
+                     NoLoc);
+
+  SourceLocation ExprLoc = From->getExprLoc();
+
+  ExprResult SetResNameFnExpr =
+      ActOnIdExpression(getCurScope(), SS, ExprLoc, Name, true, false);
+  MultiExprArg ArgExprs(&From, 1);
+
+  return ActOnCallExpr(getCurScope(), SetResNameFnExpr.get(), ExprLoc, ArgExprs,
+                       ExprLoc);
+}
+
 // RPS Change Ends
 
 void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, bool& Handled)
