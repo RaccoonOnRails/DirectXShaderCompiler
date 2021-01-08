@@ -794,6 +794,14 @@ HLSLReservedKeyword:
     assert(Tok.isNot(tok::kw_decltype) && Tok.isNot(tok::kw___super));
     return ParseCastExpression(isUnaryExpression, isAddressOfOperand);
 
+
+    // RPS Change Starts
+  case tok::kw_null:
+    if (getLangOpts().IsRPS) {
+      return Actions.ActOnRPSNullHandle(ConsumeToken());
+    }
+    __fallthrough; // 'null' is allowed as identifier in HLSL.
+    // RPS Change Ends
     // HLSL Change Starts
   case tok::kw_precise:
   case tok::kw_sample:

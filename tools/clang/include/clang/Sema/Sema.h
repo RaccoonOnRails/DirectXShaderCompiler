@@ -4076,6 +4076,7 @@ public:
   // RPS Change Starts
   //===---------------------------- RPS Features -------------------------===//
   ExprResult AddRPSSetResourceNameCall(const ValueDecl *ValueDecl, Expr *Initializer);
+  ExprResult ActOnRPSNullHandle(SourceLocation KwLoc);
   // RPS Change Ends
 
   //===---------------------------- C++ Features --------------------------===//

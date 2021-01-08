@@ -3553,8 +3553,6 @@ public:
     for (auto && intrinsic : m_intrinsicTables) {
       AddIntrinsicTableMethods(intrinsic);
     }
-
-    AddRPSBuiltinObjects();
   }
 
   void ForgetSema() override
@@ -4841,59 +4839,24 @@ public:
   }
 
   // RPS Change Starts
-  void AddRPSBuiltinObjects() {
-    DeclContext *DC = m_context->getTranslationUnitDecl();
 
-    // Declare null: null_t null;
-    QualType nullHandleType = GetBasicKindType(AR_OBJECT_RPS_NULLHANDLE);
-    IdentifierInfo &Id = m_context->Idents.get("null");
-    VarDecl *varDecl =
-        VarDecl::Create(*m_context, DC, NoLoc, NoLoc, &Id, nullHandleType,
-                        m_context->getTrivialTypeSourceInfo(nullHandleType),
-                        StorageClass::SC_Static);
+  ExprResult BuildRPSNullHandleForKind(ArBasicKind kind) {
+
+    assert(kind >= AR_OBJECT_RPS_NULLHANDLE && kind <= AR_OBJECT_RPS_VIEW);
+
+    QualType handleType = GetBasicKindType(AR_OBJECT_RPS_NULLHANDLE);
 
     Expr *zeroLiteral = IntegerLiteral::Create(
         *m_context, llvm::APInt(32, 0ULL),
         m_context->getIntTypeForBitwidth(32, true), NoLoc);
 
     Expr *exprVal =
-        ImplicitCastExpr::Create(*m_context, nullHandleType, CK_FlatConversion,
+        ImplicitCastExpr::Create(*m_context, handleType, CK_FlatConversion,
                                  zeroLiteral, nullptr, VK_RValue);
 
-    varDecl->setInit(exprVal);
-    varDecl->setImplicit(true);
-    DC->addDecl(varDecl);
-
-    //
-    QualType resourceType = GetBasicKindType(AR_OBJECT_RPS_RESOURCE);
-    QualType viewType = GetBasicKindType(AR_OBJECT_RPS_VIEW);
-
-    QualType boolType = m_baseTypes[HLSLScalarType_bool];
-
-    FunctionProtoType::ExtProtoInfo protoInfo = clang::FunctionProtoType::ExtProtoInfo();
-    std::vector<ParameterModifier> paramModifier = {
-        hlsl::ParameterModifier(hlsl::ParameterModifier::Kind::In),
-        hlsl::ParameterModifier(hlsl::ParameterModifier::Kind::In),
-    };
-
-    QualType viewCompareFuncType = m_context->getFunctionType(
-        boolType, ArrayRef<QualType>({viewType, viewType}), protoInfo,
-        paramModifier);
-
-    FunctionDecl *viewNotEqualFunc = FunctionDecl::Create(
-        *m_context, DC, NoLoc, NoLoc,
-        m_context->DeclarationNames.getCXXOperatorName(OO_ExclaimEqual),
-        viewCompareFuncType, nullptr, SC_Extern, false, false);
-
-    QualType viewNullCompareFuncType = m_context->getFunctionType(
-        boolType, ArrayRef<QualType>({viewType, nullHandleType}), protoInfo,
-        paramModifier);
-
-    FunctionDecl *viewNullNotEqualFunc = FunctionDecl::Create(
-        *m_context, DC, NoLoc, NoLoc,
-        m_context->DeclarationNames.getCXXOperatorName(OO_ExclaimEqual),
-        viewNullCompareFuncType, nullptr, SC_Extern, false, false);
+    return ExprResult(exprVal);
   }
+
   // RPS Change Ends
 
   FunctionDecl* AddHLSLIntrinsicMethod(
@@ -7079,6 +7042,12 @@ void HLSLExternalSource::InitializeInitSequenceForHLSL(
           Constructor, AccessSpecifier::AS_public, destBaseType, false, false, false);
         return;
       }
+      // RPS Change Starts
+      else if ((g_ArBasicKindsAsTypes[index] > AR_OBJECT_RPS_NULLHANDLE) &&
+               (g_ArBasicKindsAsTypes[index] <= AR_OBJECT_RPS_VIEW)) {
+        //TODO: default initialize to null
+      }
+      // RPS Change Ends
     }
     // Value initializers occur for temporaries with empty parens or braces.
     if (Kind.getKind() == InitializationKind::IK_Value) {
@@ -11384,6 +11353,10 @@ ExprResult Sema::AddRPSSetResourceNameCall(const ValueDecl *ValueDecl,
   return Result;
 }
 
+ExprResult Sema::ActOnRPSNullHandle(SourceLocation KwLoc) {
+  HLSLExternalSource *hlslSource = HLSLExternalSource::FromSema(this);
+  return hlslSource->BuildRPSNullHandleForKind(AR_OBJECT_RPS_NULLHANDLE);
+}
 // RPS Change Ends
 
 void hlsl::HandleDeclAttributeForHLSL(Sema &S, Decl *D, const AttributeList &A, bool& Handled)

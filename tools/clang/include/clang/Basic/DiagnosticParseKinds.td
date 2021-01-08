@@ -1025,6 +1025,10 @@ def warn_hlsl_effect_technique : Warning <
 def err_hlsl_enum : Error<
   "enum is unsupported in HLSL before 2017">;
 
+// RPS Change Starts
+def err_rps_syntax_generic : Error<"generic RPS syntax error. %0">;
+// RPS Change Ends
+
 // OpenMP support.
 def warn_pragma_omp_ignored : Warning<
   "unexpected '#pragma omp ...' in program">, InGroup<SourceUsesOpenMP>, DefaultIgnore;
