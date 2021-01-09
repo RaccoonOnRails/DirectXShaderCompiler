@@ -209,10 +209,11 @@ enum ArBasicKind {
   // Resource
   AR_OBJECT_RESOURCE,
 
-  // RPS
+  // RPS Change Starts
   AR_OBJECT_RPS_NULLHANDLE,
-  AR_OBJECT_RPS_RESOURCE,
-  AR_OBJECT_RPS_VIEW,
+  AR_OBJECT_RPS_BUFFER,
+  AR_OBJECT_RPS_TEXTURE,
+  // RPS Change Ends
 
   AR_BASIC_MAXIMUM_COUNT
 };
@@ -501,8 +502,8 @@ const UINT g_uBasicKindProps[] =
 
   // RPS Change Starts
   BPROP_OBJECT,                     //AR_OBJECT_RPS_NULLHANDLE,
-  BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_RESOURCE,
-  BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_VIEW,
+  BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_TEXTURE,
+  BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_BUFFER,
   // RPS Change Ends
 
   // AR_BASIC_MAXIMUM_COUNT
@@ -1345,8 +1346,8 @@ const ArBasicKind g_ArBasicKindsAsTypes[] =
 
   // RPS Change Starts
   AR_OBJECT_RPS_NULLHANDLE,
-  AR_OBJECT_RPS_RESOURCE,
-  AR_OBJECT_RPS_VIEW,
+  AR_OBJECT_RPS_TEXTURE,
+  AR_OBJECT_RPS_BUFFER,
   // RPS Change Ends
 };
 
@@ -1437,8 +1438,8 @@ const uint8_t g_ArBasicKindsTemplateCount[] =
 
   // RPS Change Starts
   0, // AR_OBJECT_RPS_NULLHANDLE,
-  0, // AR_OBJECT_RPS_RESOURCE,
-  0, // AR_OBJECT_RPS_VIEW,
+  0, // AR_OBJECT_RPS_TEXTURE,
+  0, // AR_OBJECT_RPS_BUFFER,
   // RPS Change Ends
 };
 
@@ -1539,8 +1540,8 @@ const SubscriptOperatorRecord g_ArBasicKindsSubscripts[] =
 
   // RPS Change Begins
   { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_NULLHANDLE,
-  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_RESOURCE,
-  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_VIEW,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_TEXTURE,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_BUFFER,
   // RPS Change Ends
 };
 
@@ -1665,8 +1666,8 @@ const char* g_ArBasicTypeNames[] =
 
   // RPS Change Starts
   "null_t",
-  "resource",
-  "view",
+  "texture",
+  "buffer",
   // RPS Change Ends
 };
 
@@ -3454,6 +3455,10 @@ private:
       // Create decls for each deprecated effect object type:
       unsigned effectObjBase = _countof(g_ArBasicKindsAsTypes);
       // TypeSourceInfo* effectObjTypeSource = m_context->getTrivialTypeSourceInfo(GetBasicKindType(AR_OBJECT_LEGACY_EFFECT));
+      // RPS Change Starts
+      if (m_sema->getLangOpts().IsRPS)
+        goto lRpsSkipDeprecatingEffectObjectNames;
+
       for (unsigned i = 0; i < _countof(g_DeprecatedEffectObjectNames); i++) {
         IdentifierInfo& idInfo = m_context->Idents.get(StringRef(g_DeprecatedEffectObjectNames[i]), tok::TokenKind::identifier);
         //TypedefDecl* effectObjDecl = TypedefDecl::Create(*m_context, currentDeclContext, NoLoc, NoLoc, &idInfo, effectObjTypeSource);
@@ -3463,6 +3468,8 @@ private:
         m_objectTypeDeclsMap[i+effectObjBase] = std::make_pair(effectObjDecl, effectKindIndex);
       }
     }
+
+lRpsSkipDeprecatingEffectObjectNames: // RPS Change
 
     // Make sure it's in order.
     std::sort(m_objectTypeDeclsMap.begin(), m_objectTypeDeclsMap.end(), ObjectTypeDeclMapTypeCmp);
@@ -4120,8 +4127,8 @@ public:
     case AR_OBJECT_TRIANGLE_INTERSECTION_ATTRIBUTES:
     // RPS Change Starts
     case AR_OBJECT_RPS_NULLHANDLE:
-    case AR_OBJECT_RPS_RESOURCE:
-    case AR_OBJECT_RPS_VIEW:
+    case AR_OBJECT_RPS_TEXTURE:
+    case AR_OBJECT_RPS_BUFFER:
     // RPS Change Ends
     {
         const ArBasicKind* match = std::find(g_ArBasicKindsAsTypes, &g_ArBasicKindsAsTypes[_countof(g_ArBasicKindsAsTypes)], kind);
@@ -4563,6 +4570,10 @@ public:
 
   // RPS Change Starts
 
+  static bool IsRPSViewHandleKind(ArBasicKind kind) {
+    return (kind == AR_OBJECT_RPS_TEXTURE) || (kind == AR_OBJECT_RPS_BUFFER);
+  }
+
   clang::ExprResult HandleBinaryOpForRPS(
       _In_ clang::SourceLocation OpLoc,
       _In_ clang::BinaryOperatorKind Opc,
@@ -4828,7 +4839,7 @@ public:
     }
 
     // RPS Change Starts
-    if ((kind == AR_OBJECT_RPS_RESOURCE) || (kind == AR_OBJECT_RPS_VIEW)) {
+    if (IsRPSViewHandleKind(kind)) {
        //AddRpsViewSlicingSubscripts(kind, typeDecl, recordDecl);
     }
     // RPS Change Ends
@@ -4842,7 +4853,7 @@ public:
 
   ExprResult BuildRPSNullHandleForKind(ArBasicKind kind) {
 
-    assert(kind >= AR_OBJECT_RPS_NULLHANDLE && kind <= AR_OBJECT_RPS_VIEW);
+    assert(kind >= AR_OBJECT_RPS_NULLHANDLE && kind <= AR_OBJECT_RPS_TEXTURE);
 
     QualType handleType = GetBasicKindType(AR_OBJECT_RPS_NULLHANDLE);
 
@@ -7044,7 +7055,7 @@ void HLSLExternalSource::InitializeInitSequenceForHLSL(
       }
       // RPS Change Starts
       else if ((g_ArBasicKindsAsTypes[index] > AR_OBJECT_RPS_NULLHANDLE) &&
-               (g_ArBasicKindsAsTypes[index] <= AR_OBJECT_RPS_VIEW)) {
+               (g_ArBasicKindsAsTypes[index] <= AR_OBJECT_RPS_TEXTURE)) {
         //TODO: default initialize to null
       }
       // RPS Change Ends
@@ -7994,16 +8005,6 @@ clang::ExprResult HLSLExternalSource::PerformHLSLConversion(
       }
       break;
     }
-    // RPS Change Starts
-    case ICK_RPS_ResourceToView: {
-      assert(SourceInfo.ShapeKind == AR_TOBJ_OBJECT);
-      assert(TargetInfo.ShapeKind == AR_TOBJ_OBJECT);
-      assert(SourceInfo.ObjKind == AR_OBJECT_RPS_RESOURCE);
-      assert(TargetInfo.ObjKind == AR_OBJECT_RPS_VIEW);
-      From = m_sema->ImpCastRPSResourceToView(From).get();
-      break;
-    }
-    // RPS Change Ends
 
     case ICK_Identity:
       // Nothing to do.
@@ -8547,15 +8548,8 @@ bool HLSLExternalSource::CanConvert(
 
   // RPS Change Starts
   if ((SourceInfo.ObjKind == AR_OBJECT_RPS_NULLHANDLE) &&
-      ((TargetInfo.ObjKind == AR_OBJECT_RPS_RESOURCE) ||
-       (TargetInfo.ObjKind == AR_OBJECT_RPS_VIEW))) {
+      (IsRPSViewHandleKind(TargetInfo.ObjKind))) {
     Second = ICK_Flat_Conversion;
-    goto lSuccess;
-  }
-
-  if ((SourceInfo.ObjKind == AR_OBJECT_RPS_RESOURCE) &&
-      (TargetInfo.ObjKind == AR_OBJECT_RPS_VIEW)) {
-    Second = ICK_RPS_ResourceToView;
     goto lSuccess;
   }
   // RPS Change Ends
@@ -8839,9 +8833,9 @@ void HLSLExternalSource::CheckBinOpForHLSL(
       ArBasicKind lhsKind = GetTypeElementKind(lhsType);
       ArBasicKind rhsKind = GetTypeElementKind(rhsType);
 
-      // RPS Handles
-      if (((lhsKind >= AR_OBJECT_RPS_NULLHANDLE) && (lhsKind <= AR_OBJECT_RPS_VIEW)) &&
-          ((rhsKind >= AR_OBJECT_RPS_NULLHANDLE) && (rhsKind <= AR_OBJECT_RPS_VIEW))) {
+      // RPS Handles, lower to uint32 for comparison
+      if (((lhsKind == AR_OBJECT_RPS_NULLHANDLE) || IsRPSViewHandleKind(lhsKind)) &&
+          ((rhsKind == AR_OBJECT_RPS_NULLHANDLE) || IsRPSViewHandleKind(rhsKind))) {
 
         if ((lhsKind != AR_OBJECT_RPS_NULLHANDLE) && (rhsKind != AR_OBJECT_RPS_NULLHANDLE) &&
             (lhsKind != rhsKind))

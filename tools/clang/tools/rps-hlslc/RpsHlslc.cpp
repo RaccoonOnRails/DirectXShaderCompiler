@@ -110,15 +110,16 @@ struct nodeidentifier { uint unused; };
 uint __rps_asyncmarker();
 #define async __rps_asyncmarker();
 
-resource __rps_set_resource_name(resource r, uint nameOffset, uint nameLength);
-
 // Syntax sugars
-#define rtv         [readwrite(rendertarget)] view
-#define discard_rtv [writeonly(rendertarget)] view
-#define srv         [readonly(ps, cs)] view
-#define ps_srv      [readonly(ps)] view
-#define dsv         [readwrite(depth, stencil)] view
-#define uav         [readwrite(ps, cs)] view
+#define rtv         [readwrite(rendertarget)] texture
+#define discard_rtv [writeonly(rendertarget)] texture
+#define srv         [readonly(ps, cs)] texture
+#define srv_buf     [readonly(ps, cs)] buffer
+#define ps_srv      [readonly(ps)] texture
+#define ps_srv_buf  [readonly(ps)] buffer
+#define dsv         [readwrite(depth, stencil)] texture
+#define uav         [readwrite(ps, cs)] texture
+#define uav_buf     [readwrite(ps, cs)] buffer
 
 #define __RPS_BEGIN_DECL_ENUM(X) namespace rps { enum class X {
 #define __RPS_ENUM_VALUE(N, V) N = (V),
@@ -236,11 +237,12 @@ __RPS_BEGIN_DECL_ENUM(format)
 __RPS_END_DECL_ENUM()
 
 __RPS_BEGIN_DECL_ENUM(clear)
-    __RPS_ENUM_VALUE(color     , 1 << 0)
-    __RPS_ENUM_VALUE(depth     , 1 << 1)
-    __RPS_ENUM_VALUE(stencil   , 1 << 2)
-    __RPS_ENUM_VALUE(uav_float , 1 << 3)
-    __RPS_ENUM_VALUE(uav_uint  , 1 << 4)
+    __RPS_ENUM_VALUE(color        , 1 << 0)
+    __RPS_ENUM_VALUE(depth        , 1 << 1)
+    __RPS_ENUM_VALUE(stencil      , 1 << 2)
+    __RPS_ENUM_VALUE(depth_stencil, 3 << 1)
+    __RPS_ENUM_VALUE(uav_float    , 1 << 3)
+    __RPS_ENUM_VALUE(uav_uint     , 1 << 4)
 __RPS_END_DECL_ENUM()
 
 struct SampleDesc
@@ -279,21 +281,37 @@ struct BufferRange
     uint TemporalLayer;
 };
 
-struct ResourceViewDesc
+struct TextureViewDesc
 {
     rps::format Format;
-    SubResourceRange TextureView;
-    BufferRange BufferView;
+    SubResourceRange Range;
 };
 
-ResourceDesc     describe_resource( resource r );
-ResourceViewDesc describe_view    ( view v );
-resource         create_resource  ( ResourceDesc desc );
-view             create_view      ( resource r, ResourceViewDesc desc );
-view             create_default_view( resource r );
-void             clear_view       ( view v, rps::clear option, uint4 data );
+struct BufferViewDesc
+{
+    rps::format Format;
+    uint StructureByteStride;
+    BufferRange Range;
+};
 
-inline resource create_tex2d( rps::format format, uint width, uint height, uint numMips = 1, uint arraySlices = 1, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0, rps::resource_flags flags = rps::resource_flags::none )
+texture __rps_set_resource_name(texture r, uint nameOffset, uint nameLength);
+buffer __rps_set_resource_name(buffer r, uint nameOffset, uint nameLength);
+
+ResourceDesc     describe_texture       ( texture t );
+ResourceDesc     describe_buffer        ( buffer b  );
+
+TextureViewDesc  describe_texture_view  ( texture t );
+BufferViewDesc   describe_buffer_view   ( buffer b  );
+
+texture          create_texture         ( ResourceDesc desc );
+texture          view_texture           ( texture t, TextureViewDesc desc );
+buffer           create_buffer          ( ResourceDesc desc );
+buffer           view_buffer            ( buffer b, BufferViewDesc desc );
+
+void             clear_texture          ( texture t, rps::clear option, uint4 data );
+void             clear_buffer           ( buffer b, rps::clear option, uint4 data );
+
+inline texture create_tex2d( rps::format format, uint width, uint height, uint numMips = 1, uint arraySlices = 1, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0, rps::resource_flags flags = rps::resource_flags::none )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resource_type::tex2d;
@@ -307,10 +325,10 @@ inline resource create_tex2d( rps::format format, uint width, uint height, uint 
     desc.SampleDesc.Quality = sampleQuality;
     desc.TemporalLayers = numTemporalLayers;
 
-    return create_resource(desc);
+    return create_texture(desc);
 }
 
-inline resource create_tex3d( rps::format format, uint width, uint height, uint depth, uint numMips = 1, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
+inline texture create_tex3d( rps::format format, uint width, uint height, uint depth, uint numMips = 1, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resource_type::tex2d;
@@ -324,10 +342,10 @@ inline resource create_tex3d( rps::format format, uint width, uint height, uint 
     desc.SampleDesc.Quality = 0;
     desc.TemporalLayers = numTemporalLayers;
 
-    return create_resource(desc);
+    return create_texture(desc);
 }
 
-inline resource create_buffer( uint64_t width, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
+inline texture create_buffer( uint64_t width, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
 {
     ResourceDesc desc;
     desc.Dimension = rps::resource_type::buffer;
@@ -341,7 +359,7 @@ inline resource create_buffer( uint64_t width, uint numTemporalLayers = 1, rps::
     desc.SampleDesc.Quality = 0;
     desc.TemporalLayers = numTemporalLayers;
 
-    return create_resource(desc);
+    return create_texture(desc);
 }
 
 inline SubResourceRange make_texture_range( uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0 )
@@ -369,29 +387,57 @@ inline BufferRange make_buffer_range( uint64_t offset, uint64_t sizeInBytes = 0,
     return range;
 }
 
-inline view create_texture_view( resource r, uint baseMip = 0, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0, rps::format format = rps::format::unknown )
+inline texture create_texture_view( texture r, uint baseMip = 0, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0, rps::format format = rps::format::unknown )
 {
-    ResourceViewDesc desc;
+    TextureViewDesc desc;
     desc.Format = format;
-    desc.TextureView = make_texture_range( baseMip, mipLevels, baseArraySlice, numArraySlices, planeMask, temporalLayer );
-    desc.BufferView = (BufferRange)0;
+    desc.Range = make_texture_range( baseMip, mipLevels, baseArraySlice, numArraySlices, planeMask, temporalLayer );
 
-    return create_view( r, desc );
+    return view_texture( r, desc );
 }
 
-inline view create_buffer_view( resource r, uint64_t offset = 0, uint64_t sizeInBytes = 0, uint temporalLayer = 0, rps::format format = rps::format::unknown )
+inline buffer create_buffer_view( buffer r, uint64_t offset = 0, uint64_t sizeInBytes = 0, uint temporalLayer = 0, rps::format format = rps::format::unknown )
 {
-    ResourceViewDesc desc;
+    BufferViewDesc desc;
     desc.Format = format;
-    desc.TextureView = (SubResourceRange)0;
-    desc.BufferView = make_buffer_range( offset, sizeInBytes, temporalLayer );
+    desc.Range = make_buffer_range( offset, sizeInBytes, temporalLayer );
 
-    return create_view( r, desc );
+    return view_buffer( r, desc );
 }
 
-inline void clear( view d, float4 val )
+inline void clear( texture d, float4 val )
 {
-    return clear_view( d, rps::clear::color, asuint(val) );
+    return clear_texture( d, rps::clear::color, asuint(val) );
+}
+
+inline void clear( texture d, uint4 val )
+{
+    return clear_texture( d, rps::clear::color, val );
+}
+
+inline void clear( texture d, float depth, uint stencil )
+{
+    return clear_texture( d, rps::clear::depth_stencil, uint4(asuint(depth), stencil, 0, 0) );
+}
+
+inline void clear_depth( texture d, float depth )
+{
+    return clear_texture( d, rps::clear::depth, uint4(asuint(depth), 0, 0, 0) );
+}
+
+inline void clear_stencil( texture d, uint stencil )
+{
+    return clear_texture( d, rps::clear::stencil, uint4(0, stencil, 0, 0) );
+}
+
+inline void clear( buffer d, float4 val )
+{
+    return clear_buffer( d, rps::clear::uav_float, asuint(val) );
+}
+
+inline void clear( buffer d, uint4 val )
+{
+    return clear_buffer( d, rps::clear::uav_uint, asuint(val) );
 }
 )";
 
