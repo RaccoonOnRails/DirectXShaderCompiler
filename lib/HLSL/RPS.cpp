@@ -224,12 +224,16 @@ struct DxilToRps : public ModulePass {
         llvm::GlobalValue::DLLExportStorageClass);
 
     // TODO: Make these intrinsic
-    m_RpsLibFuncs.insert(std::make_pair("describe_resource", nullptr));
-    m_RpsLibFuncs.insert(std::make_pair("describe_view", nullptr));
-    m_RpsLibFuncs.insert(std::make_pair("create_resource", nullptr));
-    m_RpsLibFuncs.insert(std::make_pair("create_view", nullptr));
-    m_RpsLibFuncs.insert(std::make_pair("create_default_view", nullptr));
-    m_RpsLibFuncs.insert(std::make_pair("clear_view", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("describe_texture", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("describe_buffer", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("describe_texture_view", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("describe_buffer_view", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("create_texture", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("create_buffer", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("view_texture", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("view_buffer", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("clear_texture", nullptr));
+    m_RpsLibFuncs.insert(std::make_pair("clear_buffer", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("__rps_set_resource_name", nullptr));
 
     SmallVector<Type *, 1> exportWrapperParamType;
