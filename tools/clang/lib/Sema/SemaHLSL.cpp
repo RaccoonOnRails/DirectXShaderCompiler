@@ -502,8 +502,8 @@ const UINT g_uBasicKindProps[] =
 
   // RPS Change Starts
   BPROP_OBJECT,                     //AR_OBJECT_RPS_NULLHANDLE,
-  BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_TEXTURE,
   BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_BUFFER,
+  BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_TEXTURE,
   // RPS Change Ends
 
   // AR_BASIC_MAXIMUM_COUNT
@@ -1346,8 +1346,8 @@ const ArBasicKind g_ArBasicKindsAsTypes[] =
 
   // RPS Change Starts
   AR_OBJECT_RPS_NULLHANDLE,
-  AR_OBJECT_RPS_TEXTURE,
   AR_OBJECT_RPS_BUFFER,
+  AR_OBJECT_RPS_TEXTURE,
   // RPS Change Ends
 };
 
@@ -1438,8 +1438,8 @@ const uint8_t g_ArBasicKindsTemplateCount[] =
 
   // RPS Change Starts
   0, // AR_OBJECT_RPS_NULLHANDLE,
-  0, // AR_OBJECT_RPS_TEXTURE,
   0, // AR_OBJECT_RPS_BUFFER,
+  0, // AR_OBJECT_RPS_TEXTURE,
   // RPS Change Ends
 };
 
@@ -1540,8 +1540,8 @@ const SubscriptOperatorRecord g_ArBasicKindsSubscripts[] =
 
   // RPS Change Begins
   { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_NULLHANDLE,
-  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_TEXTURE,
   { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_BUFFER,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_TEXTURE,
   // RPS Change Ends
 };
 
@@ -1666,8 +1666,8 @@ const char* g_ArBasicTypeNames[] =
 
   // RPS Change Starts
   "null_t",
-  "texture",
   "buffer",
+  "texture",
   // RPS Change Ends
 };
 
@@ -4127,8 +4127,8 @@ public:
     case AR_OBJECT_TRIANGLE_INTERSECTION_ATTRIBUTES:
     // RPS Change Starts
     case AR_OBJECT_RPS_NULLHANDLE:
-    case AR_OBJECT_RPS_TEXTURE:
     case AR_OBJECT_RPS_BUFFER:
+    case AR_OBJECT_RPS_TEXTURE:
     // RPS Change Ends
     {
         const ArBasicKind* match = std::find(g_ArBasicKindsAsTypes, &g_ArBasicKindsAsTypes[_countof(g_ArBasicKindsAsTypes)], kind);
@@ -4850,6 +4850,67 @@ public:
   }
 
   // RPS Change Starts
+
+  ExprResult AddRPSSetResourceNameCall(const ValueDecl *ValueDecl,
+                                       Expr *Initializer) {
+    ExprResult Result(Initializer);
+
+    QualType ThisDeclType = ValueDecl->getType().getUnqualifiedType();
+    const IdentifierInfo *DIdent = ValueDecl->getIdentifier();
+
+    if ((Initializer->getStmtClass() == Stmt::CallExprClass) &&
+        !ThisDeclType.isNull() &&
+        ThisDeclType->getTypeClass() == clang::Type::TypeClass::Record) {
+
+      ArTypeInfo typeInfo;
+      CollectInfo(ThisDeclType, &typeInfo);
+
+      if ((typeInfo.ObjKind == AR_OBJECT_RPS_BUFFER) ||
+          (typeInfo.ObjKind == AR_OBJECT_RPS_TEXTURE)) {
+        StringRef DIdentName = DIdent->getName();
+
+        CXXScopeSpec SS;
+        UnqualifiedId Name;
+        Name.setIdentifier(
+            m_sema->PP.getIdentifierInfo("__rps_set_resource_name"),
+            SourceLocation());
+        ExprResult SetResNameFnExpr = m_sema->ActOnIdExpression(
+            m_sema->getCurScope(), SS, SourceLocation(), Name, true, false);
+
+        if (!SetResNameFnExpr.isInvalid()) {
+          uint32_t nameBegin = m_sema->Context.RPSResourceNames.size();
+          m_sema->Context.RPSResourceNames.insert(
+              m_sema->Context.RPSResourceNames.end(), DIdentName.data(),
+              DIdentName.data() + DIdentName.size());
+          m_sema->Context.RPSResourceNames.push_back('\0');
+
+          Expr *SetResNameArgExprs[3];
+          SetResNameArgExprs[0] = Initializer;
+          Expr *StrOffsetLiteral = IntegerLiteral::Create(
+              *m_context, llvm::APInt(32, nameBegin),
+              m_context->getIntTypeForBitwidth(32, 0), SourceLocation());
+          Expr *StrLengthLiteral = IntegerLiteral::Create(
+              *m_context, llvm::APInt(32, DIdentName.size()),
+              m_context->getIntTypeForBitwidth(32, 0), SourceLocation());
+
+          SetResNameArgExprs[1] = ImplicitCastExpr::Create(
+              *m_context, m_context->getIntTypeForBitwidth(32, 0),
+              CK_IntegralCast, StrOffsetLiteral, nullptr, VK_RValue);
+
+          SetResNameArgExprs[2] = ImplicitCastExpr::Create(
+              m_sema->Context, m_context->getIntTypeForBitwidth(32, 0),
+              CK_IntegralCast, StrLengthLiteral, nullptr, VK_RValue);
+
+          MultiExprArg ArgExprs(SetResNameArgExprs, 3);
+          Result = m_sema->ActOnCallExpr(
+              m_sema->getCurScope(), SetResNameFnExpr.get(), SourceLocation(),
+              ArgExprs, SourceLocation());
+        }
+      }
+    }
+
+    return Result;
+  }
 
   ExprResult BuildRPSNullHandleForKind(ArBasicKind kind) {
 
@@ -11305,62 +11366,8 @@ static bool ValidateAttributeEnumRpsAccessFlags(
 
 ExprResult Sema::AddRPSSetResourceNameCall(const ValueDecl *ValueDecl,
                                            Expr *Initializer) {
-  ExprResult Result(Initializer);
-
-  QualType ThisDeclType = ValueDecl->getType().getUnqualifiedType();
-  const IdentifierInfo *DIdent = ValueDecl->getIdentifier();
-
-  if ((Initializer->getStmtClass() == Stmt::CallExprClass) &&
-      !ThisDeclType.isNull() &&
-      ThisDeclType->getTypeClass() == clang::Type::TypeClass::Record) {
-
-    const IdentifierInfo *ResourceRecIdent = PP.getIdentifierInfo("resource");
-
-    auto ResultTyDecl = ThisDeclType->getAsCXXRecordDecl();
-
-    auto ResultTyIdent = ResultTyDecl->getIdentifier();
-
-    if (ResultTyDecl->getName() == "resource") {
-
-      StringRef DIdentName = DIdent->getName();
-
-      CXXScopeSpec SS;
-      UnqualifiedId Name;
-      Name.setIdentifier(PP.getIdentifierInfo("__rps_set_resource_name"),
-                         SourceLocation());
-      ExprResult SetResNameFnExpr = ActOnIdExpression(
-          getCurScope(), SS, SourceLocation(), Name, true, false);
-
-      if (!SetResNameFnExpr.isInvalid()) {
-        uint32_t nameBegin = Context.RPSResourceNames.size();
-        Context.RPSResourceNames.insert(Context.RPSResourceNames.end(), DIdentName.data(), DIdentName.data() + DIdentName.size());
-        Context.RPSResourceNames.push_back('\0');
-
-        Expr *SetResNameArgExprs[3];
-        SetResNameArgExprs[0] = Initializer;
-        Expr *StrOffsetLiteral = IntegerLiteral::Create(
-            getASTContext(), llvm::APInt(32, nameBegin),
-            getASTContext().getIntTypeForBitwidth(32, 0), SourceLocation());
-        Expr *StrLengthLiteral = IntegerLiteral::Create(
-            Context, llvm::APInt(32, DIdentName.size()),
-            Context.getIntTypeForBitwidth(32, 0), SourceLocation());
-
-        SetResNameArgExprs[1] = ImplicitCastExpr::Create(
-            Context, Context.getIntTypeForBitwidth(32, 0), CK_IntegralCast,
-            StrOffsetLiteral, nullptr, VK_RValue);
-
-        SetResNameArgExprs[2] = ImplicitCastExpr::Create(
-            Context, Context.getIntTypeForBitwidth(32, 0), CK_IntegralCast,
-            StrLengthLiteral, nullptr, VK_RValue);
-
-        MultiExprArg ArgExprs(SetResNameArgExprs, 3);
-        Result = ActOnCallExpr(getCurScope(), SetResNameFnExpr.get(),
-                               SourceLocation(), ArgExprs, SourceLocation());
-      }
-    }
-  }
-
-  return Result;
+  HLSLExternalSource *hlslSource = HLSLExternalSource::FromSema(this);
+  return hlslSource->AddRPSSetResourceNameCall(ValueDecl, Initializer);
 }
 
 ExprResult Sema::ActOnRPSNullHandle(SourceLocation KwLoc) {
