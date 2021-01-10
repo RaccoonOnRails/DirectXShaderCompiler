@@ -71,8 +71,7 @@ struct DxilToRps : public ModulePass {
     RPS_TYPE_UINT,
     RPS_TYPE_FLOAT,
     RPS_TYPE_STRUCT,
-    RPS_TYPE_VIEW,
-    RPS_TYPE_RESOURCE,
+    RPS_TYPE_HANDLE,
   };
 
   struct RpsTypeInfo {
@@ -312,22 +311,32 @@ struct DxilToRps : public ModulePass {
       Value *argTypedPtrValue = nullptr;
 
       if (dstArgTypes[i]->isPointerTy()) {
-        if (dstArgTypes[i]->getPointerElementType()->getStructName() == "struct.resource") {
-          // TODO: Temporary solution to translate ResourceIndex to handle
-          // Load resource index value then OR RPS_SHADER_HANDLE_TYPE_RESOURCE_BIT.
-          // Shouldn't need this after external resource refactoring & resource/view/null built-in type work.
-          static const uint32_t RPS_SHADER_HANDLE_TYPE_RESOURCE_BIT = 0x40000000;
+        auto typeName = dstArgTypes[i]->getPointerElementType()->getStructName();
+
+        if ((typeName == "struct.buffer") || (typeName == "struct.texture")) {
+          // TODO: Temporary solution to translate ResourceIndex to handle.
+          // Create a call to __rps_create_default_view_from_resource_index
+          // Shouldn't need this after external resource refactoring.
           auto int32Ty = Type::getInt32Ty(M.getContext());
           auto int32PtrTy = int32Ty->getPointerTo();
           auto asInt32Ptr = Builder.CreateBitCast(argElementPtr, int32PtrTy->getPointerTo());
           auto resourceIndexPtrVal = Builder.CreateLoad(asInt32Ptr);
           auto resourceIndexVal = Builder.CreateLoad(resourceIndexPtrVal);
-          auto resourceHdlVal = Builder.CreateOr(resourceIndexVal, RPS_SHADER_HANDLE_TYPE_RESOURCE_BIT);
-          auto resourceHdlValPtr = Builder.CreateAlloca(resourceHdlVal->getType());
-          auto resourceHdlPtr = Builder.CreateBitCast(resourceHdlValPtr, dstArgTypes[i]);
-          Builder.CreateStore(resourceHdlVal, resourceHdlValPtr);
+          auto createViewFnName = "__rps_create_default_view_from_resource_index";
+          auto createViewFn = M.getFunction(createViewFnName);
+          if (!createViewFn) {
+            auto createViewFnType = FunctionType::get(int32Ty, int32Ty, false);
+            createViewFn = Function::Create(createViewFnType,
+                                            llvm::GlobalValue::ExternalLinkage,
+                                            createViewFnName, &M);
+          }
+
+          auto viewValueVal = Builder.CreateCall(createViewFn, resourceIndexVal);
+          auto viewHdlValPtr = Builder.CreateAlloca(viewValueVal->getType());
+          auto viewHdlPtr = Builder.CreateBitCast(viewHdlValPtr, dstArgTypes[i]);
+          Builder.CreateStore(viewValueVal, viewHdlValPtr);
           argTypedPtrValue = Builder.CreateAlloca(dstArgTypes[i]);
-          Builder.CreateStore(resourceHdlPtr, argTypedPtrValue);
+          Builder.CreateStore(viewHdlPtr, argTypedPtrValue);
         } else {
           argTypedPtrValue = Builder.CreateBitCast(
               argElementPtr, dstArgTypes[i]->getPointerTo());
@@ -508,8 +517,7 @@ struct DxilToRps : public ModulePass {
           ((typeInfo.arrayElementsOrPtr != 0) &&
            (typeInfo.arrayElementsOrPtr != UINT32_MAX)) ||
           (typeInfo.elementType == RpsBasicType::RPS_TYPE_STRUCT) ||
-          (typeInfo.elementType == RpsBasicType::RPS_TYPE_RESOURCE) ||
-          (typeInfo.elementType == RpsBasicType::RPS_TYPE_VIEW);
+          (typeInfo.elementType == RpsBasicType::RPS_TYPE_HANDLE);
 
       ConstantInt *paramTypeBaseVal = ConstantInt::get(
           M.getContext(), APInt(32,
@@ -714,11 +722,8 @@ struct DxilToRps : public ModulePass {
     // Struct
     if (pType->isStructTy()) {
       auto name = pType->getStructName();
-      if ((name == "struct.srv") || (name == "struct.rtv") ||
-          (name == "struct.uav") || (name == "struct.view")) {
-        typeInfo.elementType = RpsBasicType::RPS_TYPE_VIEW;
-      } else if (name == "struct.resource") {
-        typeInfo.elementType = RpsBasicType::RPS_TYPE_RESOURCE;
+      if ((name == "struct.buffer") || (name == "struct.texture")) {
+        typeInfo.elementType = RpsBasicType::RPS_TYPE_HANDLE;
       } else {
         typeInfo.elementType = RpsBasicType::RPS_TYPE_STRUCT;
       }
