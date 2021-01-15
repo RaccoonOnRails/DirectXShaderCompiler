@@ -917,6 +917,33 @@ uint [[ro]] CommittedInstanceContributionToHitGroupIndex();
 
 } namespace
 
+// RPS Change Starts
+
+namespace RpsTextureMethods {
+ResourceDesc [[]] desc();
+TextureViewDesc [[]] view_desc();
+texture [[]] base();
+texture [[]] plane(in uint planeIndex);
+texture [[]] array(in uint baseArraySlice, in int arraySliceCount);
+texture [[]] array(in uint singleSlice);
+texture [[]] mips(in uint baseMip, in int mipCount);
+texture [[]] mips(in uint singleMip);
+texture [[]] format(in uint viewFormat);
+texture [[]] temporal(in uint temporalLayer);
+} namespace
+
+namespace RpsBufferMethods {
+ResourceDesc [[]] desc();
+BufferViewDesc [[]] view_desc();
+buffer [[]] base();
+buffer [[]] format(in uint viewFormat);
+buffer [[]] stride(in uint structByteStride);
+buffer [[]] bytes(in u64 width, in u64 size);
+buffer [[]] elements(in u64 firstElement, in u64 elementCount);
+} namespace
+
+// RPS Change Ends
+
 // SPIRV Change Starts
 
 namespace VkSubpassInputMethods {

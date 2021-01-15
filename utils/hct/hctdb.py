@@ -21,6 +21,7 @@ all_stages = (
     'callable',
     'mesh',
     'amplification',
+    'renderpipeline',
     )
 
 class db_dxil_enum_value(object):
@@ -1748,9 +1749,27 @@ class db_dxil(object):
             db_dxil_param(5, "resproperty", "props", "details like component type, strutrure stride...")])
         next_op_idx += 1
 
+        # RPS Change Starts
+        self.add_dxil_op("RpsHandleGetDesc", next_op_idx, "RpsHandleGetDesc", "RPS - get handle description", "u", "", [
+            db_dxil_param(0, "v", "", ""),
+            db_dxil_param(2, "res", "res", "input handle"),
+            db_dxil_param(3, "udt", "desc", "output desc")])
+        next_op_idx += 1
+
+        self.add_dxil_op("RpsResourceViewDerive", next_op_idx, "RpsResourceViewDerive", "derive new resource view from input view", "i", "ro", [
+            db_dxil_param(0, "res", "", "output derived handle"),
+            db_dxil_param(2, "res", "res", "input handle"),
+            db_dxil_param(3, "i8", "modifierKind", "modifier kind (plane, mips, array, temporal_layer, format, stride...)"),
+            db_dxil_param(4, "i32", "modifierArg0", "modifier arg 0"),
+            db_dxil_param(5, "i32", "modifierArg1", "modifier arg 1"),
+            db_dxil_param(6, "i32", "modifierArg2", "modifier arg 2")])
+        next_op_idx += 1
+
+        # RPS Change Ends
+
         # End of DXIL 1.6 opcodes.
         self.set_op_count_for_version(1, 6, next_op_idx)
-        assert next_op_idx == 218, "218 is expected next operation index but encountered %d and thus opcodes are broken" % next_op_idx
+        assert next_op_idx == 220, "220 is expected next operation index but encountered %d and thus opcodes are broken" % next_op_idx
 
         # Set interesting properties.
         self.build_indices()
@@ -2706,7 +2725,12 @@ class db_hlsl(object):
             "string": "LICOMPTYPE_STRING",
             "Texture2D": "LICOMPTYPE_TEXTURE2D",
             "Texture2DArray": "LICOMPTYPE_TEXTURE2DARRAY",
-            "wave": "LICOMPTYPE_WAVE"}
+            "wave": "LICOMPTYPE_WAVE",
+            "buffer": "LICOMPTYPE_RPS_BUFFER",
+            "texture": "LICOMPTYPE_RPS_TEXTURE",
+            "ResourceDesc": "LICOMPTYPE_RPS_RESOURCE_DESC",
+            "BufferViewDesc": "LICOMPTYPE_RPS_BUFFER_VIEW_DESC",
+            "TextureViewDesc": "LICOMPTYPE_RPS_TEXTURE_VIEW_DESC"}
         self.trans_rowcol = {
             "r": "IA_R",
             "c": "IA_C",

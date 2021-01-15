@@ -951,6 +951,7 @@ shader_stage_to_ShaderKind = {
     'callable': 'Callable',
     'mesh' : 'Mesh',
     'amplification' : 'Amplification',
+    'renderpipeline' : 'RenderPipeline',
 }
 
 def get_min_sm_and_mask_text():
@@ -1014,6 +1015,7 @@ check_pSM_for_shader_stage = {
     'callable': 'SK == DXIL::ShaderKind::Callable',
     'mesh': 'SK == DXIL::ShaderKind::Mesh',
     'amplification': 'SK == DXIL::ShaderKind::Amplification',
+    'renderpipeline': 'SK == DXIL::ShaderKind::RenderPipeline',
 }
 
 def get_valopcode_sm_text():
@@ -1138,11 +1140,12 @@ shader_profiles = [ shader_profile(0, "ps", "Kind::Pixel", "4_0", 32, 8),
              shader_profile(6, "lib", "Kind::Library", "6_1", 32,32),
              shader_profile(13, "ms", "Kind::Mesh", "6_5", 0,0),
              shader_profile(14, "as", "Kind::Amplification", "6_5", 0,0),
+             shader_profile(15, "rps", "Kind::RenderPipeline", "6_0", 0,0),
              ]
 
 def getShaderProfiles():
     # order match DXIL::ShaderKind.
-    profiles = {"ps":"4_0", "vs":"4_0", "gs":"4_0", "hs":"5_0", "ds":"5_0", "cs":"4_0", "lib":"6_1", "ms":"6_5", "as":"6_5"}
+    profiles = {"ps":"4_0", "vs":"4_0", "gs":"4_0", "hs":"5_0", "ds":"5_0", "cs":"4_0", "lib":"6_1", "ms":"6_5", "as":"6_5", "rps":"6_0"}
     return profiles;
 
 def get_shader_models():
