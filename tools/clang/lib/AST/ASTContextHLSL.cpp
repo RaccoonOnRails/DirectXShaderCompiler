@@ -480,8 +480,118 @@ void hlsl::AddSamplerFeedbackConstants(ASTContext& context) {
 }
 
 // RPS Change Starts
-void hlsl::AddRPSConstants(clang::ASTContext& context) {
-  // TODO: Move RPS builtin constants here.
+void hlsl::AddRPSConstants(clang::ASTContext &context) {
+
+  AddTypedefPseudoEnum(context, "RPS_RESOURCE_TYPE", {
+    { "RPS_RESOURCE_BUFFER", (unsigned)DXIL::RPS::RPS_RESOURCE_TYPE_BUFFER },
+    { "RPS_RESOURCE_TEX1D",  (unsigned)DXIL::RPS::RPS_RESOURCE_TYPE_TEX1D  },
+    { "RPS_RESOURCE_TEX2D",  (unsigned)DXIL::RPS::RPS_RESOURCE_TYPE_TEX2D  },
+    { "RPS_RESOURCE_TEX3D",  (unsigned)DXIL::RPS::RPS_RESOURCE_TYPE_TEX3D  },
+  });
+
+  AddTypedefPseudoEnum(context, "RPS_RESOURCE_FLAGS", {
+    { "RPS_RESOURCE_FLAG_NONE",                 (unsigned)DXIL::RPS::RPS_RESOURCE_FLAG_NONE                 },
+    { "RPS_RESOURCE_FLAG_PERSISTENT",           (unsigned)DXIL::RPS::RPS_RESOURCE_FLAG_PERSISTENT           },
+    { "RPS_RESOURCE_FLAG_DEDICATED_ALLOCATION", (unsigned)DXIL::RPS::RPS_RESOURCE_FLAG_DEDICATED_ALLOCATION },
+    { "RPS_RESOURCE_FLAG_SYTEM_MEMORY",         (unsigned)DXIL::RPS::RPS_RESOURCE_FLAG_SYTEM_MEMORY         },
+    { "RPS_RESOURCE_FLAG_CUBEMAP_COMPATIBLE",   (unsigned)DXIL::RPS::RPS_RESOURCE_FLAG_CUBEMAP_COMPATIBLE   },
+  });
+
+  AddTypedefPseudoEnum(context, "RPS_FORMAT", {
+    { "RPS_FORMAT_UNKNOWN"                  , 0u  },
+    { "RPS_FORMAT_R32G32B32A32_TYPELESS"    , 1u  },
+    { "RPS_FORMAT_R32G32B32A32_FLOAT"       , 2u  },
+    { "RPS_FORMAT_R32G32B32A32_UINT"        , 3u  },
+    { "RPS_FORMAT_R32G32B32A32_SINT"        , 4u  },
+    { "RPS_FORMAT_R32G32B32_TYPELESS"       , 5u  },
+    { "RPS_FORMAT_R32G32B32_FLOAT"          , 6u  },
+    { "RPS_FORMAT_R32G32B32_UINT"           , 7u  },
+    { "RPS_FORMAT_R32G32B32_SINT"           , 8u  },
+    { "RPS_FORMAT_R16G16B16A16_TYPELESS"    , 9u  },
+    { "RPS_FORMAT_R16G16B16A16_FLOAT"       , 10u },
+    { "RPS_FORMAT_R16G16B16A16_UNORM"       , 11u },
+    { "RPS_FORMAT_R16G16B16A16_UINT"        , 12u },
+    { "RPS_FORMAT_R16G16B16A16_SNORM"       , 13u },
+    { "RPS_FORMAT_R16G16B16A16_SINT"        , 14u },
+    { "RPS_FORMAT_R32G32_TYPELESS"          , 15u },
+    { "RPS_FORMAT_R32G32_FLOAT"             , 16u },
+    { "RPS_FORMAT_R32G32_UINT"              , 17u },
+    { "RPS_FORMAT_R32G32_SINT"              , 18u },
+    { "RPS_FORMAT_R32G8X24_TYPELESS"        , 19u },
+    { "RPS_FORMAT_D32_FLOAT_S8X24_UINT"     , 20u },
+    { "RPS_FORMAT_R32_FLOAT_X8X24_TYPELESS" , 21u },
+    { "RPS_FORMAT_X32_TYPELESS_G8X24_UINT"  , 22u },
+    { "RPS_FORMAT_R10G10B10A2_TYPELESS"     , 23u },
+    { "RPS_FORMAT_R10G10B10A2_UNORM"        , 24u },
+    { "RPS_FORMAT_R10G10B10A2_UINT"         , 25u },
+    { "RPS_FORMAT_R11G11B10_FLOAT"          , 26u },
+    { "RPS_FORMAT_R8G8B8A8_TYPELESS"        , 27u },
+    { "RPS_FORMAT_R8G8B8A8_UNORM"           , 28u },
+    { "RPS_FORMAT_R8G8B8A8_UNORM_SRGB"      , 29u },
+    { "RPS_FORMAT_R8G8B8A8_UINT"            , 30u },
+    { "RPS_FORMAT_R8G8B8A8_SNORM"           , 31u },
+    { "RPS_FORMAT_R8G8B8A8_SINT"            , 32u },
+    { "RPS_FORMAT_R16G16_TYPELESS"          , 33u },
+    { "RPS_FORMAT_R16G16_FLOAT"             , 34u },
+    { "RPS_FORMAT_R16G16_UNORM"             , 35u },
+    { "RPS_FORMAT_R16G16_UINT"              , 36u },
+    { "RPS_FORMAT_R16G16_SNORM"             , 37u },
+    { "RPS_FORMAT_R16G16_SINT"              , 38u },
+    { "RPS_FORMAT_R32_TYPELESS"             , 39u },
+    { "RPS_FORMAT_D32_FLOAT"                , 40u },
+    { "RPS_FORMAT_R32_FLOAT"                , 41u },
+    { "RPS_FORMAT_R32_UINT"                 , 42u },
+    { "RPS_FORMAT_R32_SINT"                 , 43u },
+    { "RPS_FORMAT_R24G8_TYPELESS"           , 44u },
+    { "RPS_FORMAT_D24_UNORM_S8_UINT"        , 45u },
+    { "RPS_FORMAT_R24_UNORM_X8_TYPELESS"    , 46u },
+    { "RPS_FORMAT_X24_TYPELESS_G8_UINT"     , 47u },
+    { "RPS_FORMAT_R8G8_TYPELESS"            , 48u },
+    { "RPS_FORMAT_R8G8_UNORM"               , 49u },
+    { "RPS_FORMAT_R8G8_UINT"                , 50u },
+    { "RPS_FORMAT_R8G8_SNORM"               , 51u },
+    { "RPS_FORMAT_R8G8_SINT"                , 52u },
+    { "RPS_FORMAT_R16_TYPELESS"             , 53u },
+    { "RPS_FORMAT_R16_FLOAT"                , 54u },
+    { "RPS_FORMAT_D16_UNORM"                , 55u },
+    { "RPS_FORMAT_R16_UNORM"                , 56u },
+    { "RPS_FORMAT_R16_UINT"                 , 57u },
+    { "RPS_FORMAT_R16_SNORM"                , 58u },
+    { "RPS_FORMAT_R16_SINT"                 , 59u },
+    { "RPS_FORMAT_R8_TYPELESS"              , 60u },
+    { "RPS_FORMAT_R8_UNORM"                 , 61u },
+    { "RPS_FORMAT_R8_UINT"                  , 62u },
+    { "RPS_FORMAT_R8_SNORM"                 , 63u },
+    { "RPS_FORMAT_R8_SINT"                  , 64u },
+    { "RPS_FORMAT_A8_UNORM"                 , 65u },
+    { "RPS_FORMAT_R1_UNORM"                 , 66u },
+    { "RPS_FORMAT_R9G9B9E5_SHAREDEXP"       , 67u },
+    { "RPS_FORMAT_R8G8_B8G8_UNORM"          , 68u },
+    { "RPS_FORMAT_G8R8_G8B8_UNORM"          , 69u },
+    { "RPS_FORMAT_BC1_TYPELESS"             , 70u },
+    { "RPS_FORMAT_BC1_UNORM"                , 71u },
+    { "RPS_FORMAT_BC1_UNORM_SRGB"           , 72u },
+    { "RPS_FORMAT_BC2_TYPELESS"             , 73u },
+    { "RPS_FORMAT_BC2_UNORM"                , 74u },
+    { "RPS_FORMAT_BC2_UNORM_SRGB"           , 75u },
+    { "RPS_FORMAT_BC3_TYPELESS"             , 76u },
+    { "RPS_FORMAT_BC3_UNORM"                , 77u },
+    { "RPS_FORMAT_BC3_UNORM_SRGB"           , 78u },
+    { "RPS_FORMAT_BC4_TYPELESS"             , 79u },
+    { "RPS_FORMAT_BC4_UNORM"                , 80u },
+    { "RPS_FORMAT_BC4_SNORM"                , 81u },
+    { "RPS_FORMAT_BC5_TYPELESS"             , 82u },
+    { "RPS_FORMAT_BC5_UNORM"                , 83u },
+    { "RPS_FORMAT_BC5_SNORM"                , 84u },
+    { "RPS_FORMAT_B5G6R5_UNORM"             , 85u },
+    { "RPS_FORMAT_B5G5R5A1_UNORM"           , 86u },
+    { "RPS_FORMAT_B8G8R8A8_UNORM"           , 87u },
+    { "RPS_FORMAT_B8G8R8X8_UNORM"           , 88u },
+    { "RPS_FORMAT_B8G8R8A8_TYPELESS"        , 90u },
+    { "RPS_FORMAT_B8G8R8A8_UNORM_SRGB"      , 91u },
+    { "RPS_FORMAT_B8G8R8X8_TYPELESS"        , 92u },
+    { "RPS_FORMAT_B8G8R8X8_UNORM_SRGB"      , 93u },
+  });
 }
 // RPS Change Ends
 
@@ -866,6 +976,104 @@ CXXRecordDecl* hlsl::DeclareResourceType(ASTContext& context) {
 
   return typeDeclBuilder.completeDefinition();
 }
+
+// RPS Change Starts
+CXXRecordDecl *hlsl::DeclareRpsSubResourceRangeType(clang::ASTContext &context) {
+  // struct SubResourceRange {
+  //   uint BaseMip;
+  //   uint Mips;
+  //   uint BaseArraySlice;
+  //   uint ArrayLayers;
+  //   uint PlaneMask;
+  //   uint TemporalLayer;
+  // };
+  BuiltinTypeDeclBuilder subResRangeTypeBuilder(
+      context.getTranslationUnitDecl(), "SubResourceRange",
+      TagDecl::TagKind::TTK_Struct);
+
+  subResRangeTypeBuilder.startDefinition();
+  subResRangeTypeBuilder.addField("BaseMip", context.UnsignedIntTy, AS_public);
+  subResRangeTypeBuilder.addField("MipLevels", context.UnsignedIntTy, AS_public);
+  subResRangeTypeBuilder.addField("BaseArraySlice", context.UnsignedIntTy, AS_public);
+  subResRangeTypeBuilder.addField("ArrayLayers", context.UnsignedIntTy, AS_public);
+  subResRangeTypeBuilder.addField("PlaneMask", context.UnsignedIntTy, AS_public);
+  subResRangeTypeBuilder.addField("TemporalLayer", context.UnsignedIntTy, AS_public);
+
+  CXXRecordDecl* subResRangeTypeDecl = subResRangeTypeBuilder.completeDefinition();
+
+  return subResRangeTypeDecl;
+}
+
+CXXRecordDecl *hlsl::DeclareRpsResourceDescType(clang::ASTContext &context) {
+
+  //NamespaceDecl *RpsNS =
+  //    NamespaceDecl::Create(context, context.getTranslationUnitDecl(), false,
+  //                          NoLoc, NoLoc, &context.Idents.get("rps"), nullptr);
+
+  BuiltinTypeDeclBuilder typeDeclBuilder(context.getTranslationUnitDecl(),
+                                         "ResourceDesc",
+                                         TagDecl::TagKind::TTK_Struct);
+  typeDeclBuilder.startDefinition();
+
+  typeDeclBuilder.addField("Dimension", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("Flags", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("Format", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("Width", context.UnsignedLongLongTy, AS_public);
+  typeDeclBuilder.addField("Height", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("DepthOrArraySize", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("MipLevels", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("SampleCount", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("SampleQuality", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("TemporalLayers", context.UnsignedIntTy, AS_public);
+
+  return typeDeclBuilder.completeDefinition();
+}
+
+CXXRecordDecl *hlsl::DeclareRpsTextureViewDescType(clang::ASTContext &context,
+                                                   QualType subResRangeType) {
+
+  //struct TextureViewDesc {
+  //  SubResourceRange Range;
+  //  RPS_FORMAT Format;
+  //};
+
+  BuiltinTypeDeclBuilder typeDeclBuilder(context.getTranslationUnitDecl(),
+                                         "TextureViewDesc",
+                                         TagDecl::TagKind::TTK_Struct);
+
+  typeDeclBuilder.startDefinition();
+
+  typeDeclBuilder.addField("Range", subResRangeType, AS_public);
+  typeDeclBuilder.addField("Format", context.UnsignedIntTy, AS_public);
+
+  return typeDeclBuilder.completeDefinition();
+}
+
+CXXRecordDecl *hlsl::DeclareRpsBufferViewDescType(clang::ASTContext &context)
+{
+  //struct BufferViewDesc {
+  //  uint64_t Offset;
+  //  uint64_t SizeInBytes;
+  //  RPS_FORMAT Format;
+  //  uint StructureByteStride;
+  //  uint TemporalLayer;
+  //};
+
+  BuiltinTypeDeclBuilder typeDeclBuilder(context.getTranslationUnitDecl(),
+                                         "BufferViewDesc",
+                                         TagDecl::TagKind::TTK_Struct);
+  typeDeclBuilder.startDefinition();
+
+  typeDeclBuilder.addField("Offset", context.UnsignedLongLongTy, AS_public);
+  typeDeclBuilder.addField("SizeInBytes", context.UnsignedLongLongTy, AS_public);
+  typeDeclBuilder.addField("Format", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("StructureByteStride", context.UnsignedIntTy, AS_public);
+  typeDeclBuilder.addField("TemporalLayer", context.UnsignedIntTy, AS_public);
+
+  return typeDeclBuilder.completeDefinition();
+}
+
+// RPS Change Ends
 
 bool hlsl::IsIntrinsicOp(const clang::FunctionDecl *FD) {
   return FD != nullptr && FD->hasAttr<HLSLIntrinsicAttr>();

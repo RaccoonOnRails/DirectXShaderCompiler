@@ -327,6 +327,13 @@ clang::CXXRecordDecl* DeclareUIntTemplatedTypeWithHandle(
 clang::CXXRecordDecl* DeclareRayQueryType(clang::ASTContext& context);
 clang::CXXRecordDecl *DeclareResourceType(clang::ASTContext &context);
 
+// RPS Change Starts
+clang::CXXRecordDecl *DeclareRpsSubResourceRangeType(clang::ASTContext &context);
+clang::CXXRecordDecl *DeclareRpsResourceDescType(clang::ASTContext &context);
+clang::CXXRecordDecl *DeclareRpsTextureViewDescType(clang::ASTContext &context, clang::QualType subResRangeType);
+clang::CXXRecordDecl *DeclareRpsBufferViewDescType(clang::ASTContext &context);
+// RPS Change Ends
+
 /// <summary>Create a function template declaration for the specified method.</summary>
 /// <param name="context">AST context in which to work.</param>
 /// <param name="recordDecl">Class in which the function template is declared.</param>
