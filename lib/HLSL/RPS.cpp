@@ -22,6 +22,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
+using namespace hlsl::DXIL::RPS;
 
 #define RPS_DEBUG_VERBOSE 0
 #define DEBUG_TYPE "rps"
@@ -47,32 +48,7 @@ struct DxilToRps : public ModulePass {
   static char ID; // Pass identification, replacement for typeid
   DxilToRps() : ModulePass(ID) {}
 
-  Function *m_RpsNodeCallFunc = nullptr;
-  Function *m_RpsNodeParamPushFunc = nullptr;
-
-  enum RpsCommandTypeFlagBits {
-    RPS_COMMAND_TYPE_NO_FLAGS                   = 0,            ///< No flags.
-    RPS_COMMAND_TYPE_GRAPHICS_BIT               = (1 << 1),     ///< The command is graphics only.
-    RPS_COMMAND_TYPE_COMPUTE_BIT                = (1 << 2),     ///< The command is compute only.
-    RPS_COMMAND_TYPE_COPY_BIT                   = (1 << 3),     ///< The command is copy only.
-    RPS_COMMAND_TYPE_RESOLVE_BIT                = (1 << 4),     ///< The command is resolve only.
-    RPS_COMMAND_TYPE_CALLBACK_BIT               = (1 << 5),     ///< The command is a callback, no setup.
-    RPS_COMMAND_TYPE_CMD_BUF_BIT                = (1 << 6),     ///< The command submits prebuilt cmd bufs.
-    RPS_COMMAND_TYPE_PREFER_ASYNC_BIT           = (1 << 7),     ///< The command type prefers to run on an async queue.
-    RPS_COMMAND_TYPE_CUSTOM_VIEWPORT_BIT        = (1 << 8),     ///< The callback will set a custom viewport & scissor.
-    RPS_COMMAND_TYPE_EXTERNAL_WRITE_BIT         = (1 << 9),     ///< Command does some external write, such as updating debug CPU data.
-  };
-
-  enum class RpsBasicType : uint8_t
-  {
-    RPS_TYPE_UNKNOWN,
-    RPS_TYPE_BOOL,
-    RPS_TYPE_SINT,
-    RPS_TYPE_UINT,
-    RPS_TYPE_FLOAT,
-    RPS_TYPE_STRUCT,
-    RPS_TYPE_HANDLE,
-  };
+  Function *m_RpsIntrinsicFuncs[int32_t(RpsIntrinsicEntry::COUNT)] = {};
 
   struct RpsTypeInfo {
     RpsBasicType elementType;
@@ -197,21 +173,44 @@ struct DxilToRps : public ModulePass {
 
     m_StrTableValueString = M.GetHLModule().TakeRPSStringTable();
 
+    // Intrinsics
     auto voidType = Type::getVoidTy(M.getContext());
     auto intType = Type::getInt32Ty(M.getContext());
-    auto nodeCallFunc =
-        M.getOrInsertFunction("__rps_node_call", voidType, intType, intType,
-                              intType, nullptr); // ModuleId, NodeId, NodeFlags
-    m_RpsNodeCallFunc = dyn_cast<Function>(nodeCallFunc);
-    m_RpsNodeCallFunc->setLinkage(GlobalValue::ExternalLinkage);
-
     auto int8PtrType = Type::getInt8PtrTy(M.getContext());
-    auto paramPushFunc =
-        M.getOrInsertFunction("__rps_param_push", voidType, int8PtrType,
-                              intType, intType, intType, nullptr);
-    m_RpsNodeParamPushFunc = dyn_cast<Function>(paramPushFunc);
-    m_RpsNodeParamPushFunc->setLinkage(GlobalValue::ExternalLinkage);
+    auto int32PtrType = intType->getPointerTo();
 
+    const struct RpsIntrinsicFuncDesc {
+      Type *ReturnTy;
+      Type *ArgTys[4];
+      uint32_t NumArgs;
+      const char *Name;
+    } rpsIntrinsicFnDescs[] = {
+        // Ret,     Arg0,               Arg1,               Arg2,               Arg3
+        // void __rps_node_call( int32 moduleId, int32 nodeId, int32 nodeFlags );
+        { voidType, { intType,          intType,            intType,            nullptr         }, 3, "__rps_node_call" },
+        // void __rps_param_push( int8* pParam, int32 sizeInBytes, int32 typeCategoryAndFlag, uint32_t accessFlags );
+        { voidType, { int8PtrType,      intType,            intType,            intType         }, 4, "__rps_param_push" },
+        // void __rps_create_handle( int32* pOutHandle, int8* pCreateData, int32 createDataSize );
+        { voidType, { int32PtrType,     int32PtrType,       intType,            nullptr         }, 3, "__rps_create_handle" },
+        // void __rps_describe_handle( XDesc* pOutData, int32 dataSize, int32* inHandle, int32 describeOp );
+        { voidType, { int8PtrType,      intType,            int32PtrType,       intType         }, 4, "__rps_describe_handle" },
+        // void __rps_derive_handle( int32* pOutHandle, int32* pInHandle, int32 modifierOp, int32* modifierArgs );
+        { voidType, { int32PtrType,     int32PtrType,       intType,            int32PtrType    }, 4, "__rps_derive_handle" },
+    };
+
+    static_assert(_countof(rpsIntrinsicFnDescs) == int(RpsIntrinsicEntry::COUNT),
+                  "rpsIntrinsicFnDescs needs update.");
+
+    for (uint32_t i = 0; i < _countof(rpsIntrinsicFnDescs); i++) {
+      auto &FnDesc = rpsIntrinsicFnDescs[i];
+      auto FnType = FunctionType::get(
+          FnDesc.ReturnTy, ArrayRef<Type *>(FnDesc.ArgTys, FnDesc.NumArgs),
+          false);
+      m_RpsIntrinsicFuncs[i] = Function::Create(
+          FnType, GlobalValue::ExternalLinkage, FnDesc.Name, &M);
+    }
+
+    // Module Id global
     m_ModuleIdGlobal = dyn_cast<GlobalVariable>(
         M.getOrInsertGlobal(AddModuleNamePostfix("__rps_module_id"), intType));
 
@@ -219,8 +218,7 @@ struct DxilToRps : public ModulePass {
     m_ModuleIdGlobal->setInitializer(constIntZero);
     m_ModuleIdGlobal->setLinkage(GlobalValue::ExternalLinkage);
     m_ModuleIdGlobal->setConstant(false);
-    m_ModuleIdGlobal->setDLLStorageClass(
-        llvm::GlobalValue::DLLExportStorageClass);
+    m_ModuleIdGlobal->setDLLStorageClass(llvm::GlobalValue::DLLExportStorageClass);
 
     // TODO: Make these intrinsic
     m_RpsLibFuncs.insert(std::make_pair("describe_texture", nullptr));
@@ -235,11 +233,12 @@ struct DxilToRps : public ModulePass {
     m_RpsLibFuncs.insert(std::make_pair("clear_buffer", nullptr));
     m_RpsLibFuncs.insert(std::make_pair("__rps_set_resource_name", nullptr));
 
+    // Export wrapper
     SmallVector<Type *, 1> exportWrapperParamType;
     exportWrapperParamType.push_back(
         Type::getInt8PtrTy(M.getContext())->getPointerTo());
     m_RpsExportWrapperFuncType = FunctionType::get(
-        llvm::Type::getVoidTy(M.getContext()), exportWrapperParamType, false);
+        Type::getVoidTy(M.getContext()), exportWrapperParamType, false);
   }
 
   void DemangleBuiltinFunctions(CallInst *C) {
@@ -370,7 +369,7 @@ struct DxilToRps : public ModulePass {
     if (DM.HasDxilFunctionProps(&F)) {
       auto &FuncProp = DM.GetDxilFunctionProps(&F);
       if(FuncProp.IsRPS()) {
-        bIsExportEntry = (FuncProp.ShaderProps.RPS.entryKind == hlsl::DXIL::RPS::EntryKind::ExportEntry);
+        bIsExportEntry = (FuncProp.ShaderProps.RPS.entryKind == EntryKind::ExportEntry);
       }
     }
 
@@ -445,6 +444,10 @@ struct DxilToRps : public ModulePass {
       assert(false);
     }
     toRemove.erase(U);
+  }
+
+  inline Function *GetIntrinsicFunc(RpsIntrinsicEntry entry) {
+    return m_RpsIntrinsicFuncs[uint32_t(entry)];
   }
 
   void ProcessNodeCall(Module& M, Function &F, uint32_t nodeDefIdx, CallSite &callSite,
@@ -527,7 +530,7 @@ struct DxilToRps : public ModulePass {
       ConstantInt *paramFlagsVal = ConstantInt::get(
           M.getContext(), APInt(32, uint32_t(paramInfo.flags)));
 
-      auto pushInst = CallInst::Create(m_RpsNodeParamPushFunc,
+      auto pushInst = CallInst::Create(GetIntrinsicFunc(RpsIntrinsicEntry::PARAM_PUSH),
           { argAsBytePtrVal, argSizeInBytesVal, paramTypeBaseVal, paramFlagsVal },
           "", callInst);
 
@@ -535,7 +538,7 @@ struct DxilToRps : public ModulePass {
     }
 
     auto loadModuleId = new LoadInst(m_ModuleIdGlobal, "", callInst);
-    CallInst::Create(m_RpsNodeCallFunc,
+    CallInst::Create(GetIntrinsicFunc(RpsIntrinsicEntry::NODE_CALL),
                      {loadModuleId, nodeDefIdxVal, nodeFlagsVal}, "", callInst);
 
     callInstsToRemove.push_back(callInst);
@@ -559,8 +562,8 @@ struct DxilToRps : public ModulePass {
         RPS_COMMAND_TYPE_COPY_BIT,
       };
 
-      static_assert(sizeof(entryKindToFlags) / sizeof(entryKindToFlags[0]) == uint32_t(hlsl::DXIL::RPS::EntryKind::MaxValue),
-          "Mismatching entryKindToFlags and hlsl::DXIL::RPS::EntryKind");
+      static_assert(sizeof(entryKindToFlags) / sizeof(entryKindToFlags[0]) == uint32_t(EntryKind::MaxValue),
+          "Mismatching entryKindToFlags and EntryKind");
 
       bool isNodeDef = false;
       uint32_t nodeFlags = RPS_COMMAND_TYPE_NO_FLAGS;

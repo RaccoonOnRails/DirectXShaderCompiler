@@ -5092,6 +5092,181 @@ Value *TranslateGetHandleFromHeap(CallInst *CI, IntrinsicOp IOP,
 }
 }
 
+// RPS Change Starts
+namespace {
+
+constexpr uint32_t kRpsResourcePtrIdx = 1U;
+
+Value *TranslateRpsHandleGetDesc(CallInst *CI, IntrinsicOp IOP,
+                                 DXIL::OpCode opcode,
+                                 HLOperationLowerHelper &helper,
+                                 HLObjectOperationLowerHelper *pObjHelper,
+                                 bool &Translated) {
+
+  Value *resourcePtr = CI->getArgOperand(kRpsResourcePtrIdx);
+  Type *resourceTy = resourcePtr->getType()->getPointerElementType();
+
+  DXIL::RPS::RpsDescribeHandleOp dhOp;
+
+  switch (IOP) {
+  case IntrinsicOp::MOP_desc:
+    dhOp = DXIL::RPS::RpsDescribeHandleOp::Resource;
+    break;
+  case IntrinsicOp::MOP_view_desc:
+    dhOp = (resourceTy->getStructName() == "struct.buffer")
+               ? DXIL::RPS::RpsDescribeHandleOp::BufferView
+               : DXIL::RPS::RpsDescribeHandleOp::TextureView;
+    break;
+  default:
+    // TODO: Report error.
+    Translated = false;
+    return nullptr;
+  }
+
+  Function *Fn = CI->getModule()->getFunction("__rps_describe_handle");
+
+  // XDesc* get_desc( i32 opCode, resource* handle ) =>
+  // void __rps_describe_handle(
+  //    XDesc* pOutData, int32 dataSize, int32* inHandle, int32 describeOp );
+
+  IRBuilder<> Builder(CI);
+
+  Type *CIRetTy = CI->getFunctionType()->getReturnType();
+  Type *DescTy = CIRetTy->getPointerElementType();
+
+  Value *retPtr = Builder.CreateAlloca(DescTy);
+
+  auto sizeOfDesc = CI->getModule()->getDataLayout().getTypeStoreSize(DescTy);
+  Value *argRetSize = ConstantInt::get(helper.i32Ty, sizeOfDesc);
+
+  Value *argResHdl = Builder.CreateCast(Instruction::BitCast, resourcePtr,
+                                        PointerType::get(helper.i32Ty, 0));
+
+  Value *argOp = ConstantInt::get(helper.i32Ty, uint32_t(dhOp));
+
+  Value *argRetPtr = Builder.CreateCast(Instruction::BitCast, retPtr,
+                                        PointerType::get(helper.i8Ty, 0));
+
+  Builder.CreateCall(Fn, {argRetPtr, argRetSize, argResHdl, argOp});
+
+  return retPtr;
+}
+
+struct ViewModifierOpInfo
+{ IntrinsicOp op; DXIL::RPS::RPS_VIEW_MODIFIER_TYPE modifier; uint32_t numInt32Args; } g_ModifierOpInfo[] = {
+  { IntrinsicOp::MOP_array,     DXIL::RPS::RPS_VIEW_MODIFIER_ARRAY_RANGE   , 2 },
+  { IntrinsicOp::MOP_base,      DXIL::RPS::RPS_VIEW_MODIFIER_GET_BASE      , 0 },
+  { IntrinsicOp::MOP_desc,      DXIL::RPS::RPS_VIEW_MODIFIER_NONE          , 0 },
+  { IntrinsicOp::MOP_format,    DXIL::RPS::RPS_VIEW_MODIFIER_FORMAT        , 1 },
+  { IntrinsicOp::MOP_mips,      DXIL::RPS::RPS_VIEW_MODIFIER_MIPS_RANGE    , 2 },
+  { IntrinsicOp::MOP_plane,     DXIL::RPS::RPS_VIEW_MODIFIER_PLANE         , 1 },
+  { IntrinsicOp::MOP_temporal,  DXIL::RPS::RPS_VIEW_MODIFIER_TEMPORAL_LAYER, 1 },
+  { IntrinsicOp::MOP_view_desc, DXIL::RPS::RPS_VIEW_MODIFIER_NONE          , 0 },
+  { IntrinsicOp::MOP_bytes,     DXIL::RPS::RPS_VIEW_MODIFIER_BYTE_RANGE    , 4 },
+  { IntrinsicOp::MOP_elements,  DXIL::RPS::RPS_VIEW_MODIFIER_ELEMENT_RANGE , 4 },
+  { IntrinsicOp::MOP_stride,    DXIL::RPS::RPS_VIEW_MODIFIER_STRUCT_STRIDE , 1 },
+};
+
+static_assert(_countof(g_ModifierOpInfo) == (int)IntrinsicOp::MOP_stride - (int)IntrinsicOp::MOP_array + 1, "g_ModifierOpInfo needs update");
+
+Value *TranslateRpsViewDerive(CallInst *CI, IntrinsicOp IOP,
+                              DXIL::OpCode opcode,
+                              HLOperationLowerHelper &helper,
+                              HLObjectOperationLowerHelper *pObjHelper,
+                              bool &Translated) {
+  const DataLayout &DL = CI->getModule()->getDataLayout();
+
+  Function *Fn = CI->getModule()->getFunction("__rps_derive_handle");
+
+  IRBuilder<> Builder(CI);
+
+  Value *resourcePtr = CI->getArgOperand(kRpsResourcePtrIdx);
+
+  int opInfoIndex = int(IOP) - int(IntrinsicOp::MOP_array);
+  assert(opInfoIndex < _countof(g_ModifierOpInfo));
+  assert(g_ModifierOpInfo[opInfoIndex].op == IOP);
+
+  // OpCode + Args
+  uint32_t modifierPayloadI32Count = g_ModifierOpInfo[opInfoIndex].numInt32Args;
+  Value *modifierArgs = Builder.CreateAlloca(
+      helper.i32Ty, ConstantInt::get(helper.i32Ty, modifierPayloadI32Count));
+
+  Value *modifierOpCode =
+    ConstantInt::get(helper.i32Ty, g_ModifierOpInfo[opInfoIndex].modifier);
+
+  // Default arg for single mip / array slice count
+  Value *constOne = ConstantInt::get(helper.i32Ty, 1);
+
+  switch (IOP) {
+  case IntrinsicOp::MOP_elements:
+  case IntrinsicOp::MOP_bytes: {
+    Value *offsetU64Val = CI->getArgOperand(HLOperandIndex::kHandleOpIdx + 1);
+    Value *sizeU64Val = CI->getArgOperand(HLOperandIndex::kHandleOpIdx + 2);
+
+    Value *modifierArg0 =
+        Builder.CreateGEP(modifierArgs, ConstantInt::get(helper.i32Ty, 0));
+    Value *modifierArg1 =
+        Builder.CreateGEP(modifierArgs, ConstantInt::get(helper.i32Ty, 1));
+    Value *modifierArg2 =
+        Builder.CreateGEP(modifierArgs, ConstantInt::get(helper.i32Ty, 2));
+    Value *modifierArg3 =
+        Builder.CreateGEP(modifierArgs, ConstantInt::get(helper.i32Ty, 3));
+
+    Value *offsetU64ValHi = Builder.CreateExtractInteger(
+        DL, offsetU64Val, IntegerType::get(CI->getContext(), 32), 4, "");
+    Value *offsetU64ValLo = Builder.CreateTrunc(offsetU64Val, helper.i32Ty);
+    Value *sizeU64ValHi = Builder.CreateExtractInteger(
+        DL, sizeU64Val, IntegerType::get(CI->getContext(), 32), 4, "");
+    Value *sizeU64ValLo = Builder.CreateTrunc(sizeU64Val, helper.i32Ty);
+
+    Builder.CreateStore(offsetU64ValHi, modifierArg0);
+    Builder.CreateStore(offsetU64ValLo, modifierArg1);
+    Builder.CreateStore(sizeU64ValHi, modifierArg2);
+    Builder.CreateStore(sizeU64ValLo, modifierArg3);
+  } break;
+  default: {
+
+    uint32_t numCIOperands = CI->getNumArgOperands();
+
+    for (uint32_t argIdx = 0; argIdx < modifierPayloadI32Count; argIdx++) {
+      Value *modifierArgPtr = Builder.CreateGEP(
+          modifierArgs, ConstantInt::get(helper.i32Ty, argIdx));
+
+      uint32_t srcArgOperandIdx = HLOperandIndex::kHandleOpIdx + 1 + argIdx;
+
+      assert((srcArgOperandIdx < numCIOperands) ||
+             (IOP == IntrinsicOp::MOP_mips) || (IOP == IntrinsicOp::MOP_array));
+
+      Value *modifierArgValue = (srcArgOperandIdx < numCIOperands)
+                                    ? CI->getArgOperand(srcArgOperandIdx)
+                                    : constOne;
+      Builder.CreateStore(modifierArgValue, modifierArgPtr);
+    }
+  } break;
+  }
+
+  // Return
+  Type *CIRetTy = CI->getFunctionType()->getReturnType();
+  Type *DescTy = CIRetTy->getPointerElementType();
+  Value *retPtr = Builder.CreateAlloca(DescTy);
+  Value *argRetPtr = Builder.CreateCast(Instruction::BitCast, retPtr,
+                                        PointerType::get(helper.i32Ty, 0));
+
+  // In handle
+  Value *argResHdl = Builder.CreateCast(Instruction::BitCast, resourcePtr,
+                                        PointerType::get(helper.i32Ty, 0));
+
+  // void __rps_derive_handle(
+  //    int32* pOutHandle, int32* pInHandle, int32 numModifiers, int32* modifiers );
+
+  Builder.CreateCall(Fn, {argRetPtr, argResHdl, modifierOpCode, modifierArgs});
+
+  return retPtr;
+}
+
+} // namespace
+// RPS Change Ends
+
 // Lower table.
 namespace {
 
@@ -5418,7 +5593,19 @@ IntrinsicLower gLowerTable[] = {
     {IntrinsicOp::MOP_TraceRayInline,  TranslateTraceRayInline,  DXIL::OpCode::RayQuery_TraceRayInline},
     {IntrinsicOp::MOP_WorldRayDirection, TranslateRayQueryFloat3Getter, DXIL::OpCode::RayQuery_WorldRayDirection},
     {IntrinsicOp::MOP_WorldRayOrigin, TranslateRayQueryFloat3Getter, DXIL::OpCode::RayQuery_WorldRayOrigin},
-
+    // RPS Change Starts
+    {IntrinsicOp::MOP_array,        TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    {IntrinsicOp::MOP_base,         TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    {IntrinsicOp::MOP_desc,         TranslateRpsHandleGetDesc, DXIL::OpCode::RpsHandleGetDesc},
+    {IntrinsicOp::MOP_format,       TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    {IntrinsicOp::MOP_mips,         TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    {IntrinsicOp::MOP_plane,        TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    {IntrinsicOp::MOP_temporal,     TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    {IntrinsicOp::MOP_view_desc,    TranslateRpsHandleGetDesc, DXIL::OpCode::RpsHandleGetDesc},
+    {IntrinsicOp::MOP_bytes,        TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    {IntrinsicOp::MOP_elements,     TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    {IntrinsicOp::MOP_stride,       TranslateRpsViewDerive, DXIL::OpCode::RpsResourceViewDerive},
+    // RPS change Ends
     // SPIRV change starts
 #ifdef ENABLE_SPIRV_CODEGEN
     {IntrinsicOp::MOP_SubpassLoad, UnsupportedVulkanIntrinsic, DXIL::OpCode::NumOpCodes},
