@@ -6249,6 +6249,139 @@ static const HLSL_INTRINSIC g_RayQueryMethods[] =
 };
 
 //
+// Start of RpsTextureMethods
+//
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args0[] =
+{
+    {"array", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_TEXTURE, 1, 1},
+    {"singleSlice", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args1[] =
+{
+    {"array", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_TEXTURE, 1, 1},
+    {"baseArraySlice", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+    {"arraySliceCount", AR_QUAL_IN, 2, LITEMPLATE_SCALAR, 2, LICOMPTYPE_INT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args2[] =
+{
+    {"base", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_TEXTURE, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args3[] =
+{
+    {"desc", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_RESOURCE_DESC, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args4[] =
+{
+    {"format", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_TEXTURE, 1, 1},
+    {"viewFormat", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args5[] =
+{
+    {"mips", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_TEXTURE, 1, 1},
+    {"singleMip", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args6[] =
+{
+    {"mips", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_TEXTURE, 1, 1},
+    {"baseMip", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+    {"mipCount", AR_QUAL_IN, 2, LITEMPLATE_SCALAR, 2, LICOMPTYPE_INT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args7[] =
+{
+    {"plane", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_TEXTURE, 1, 1},
+    {"planeIndex", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args8[] =
+{
+    {"temporal", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_TEXTURE, 1, 1},
+    {"temporalLayer", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsTextureMethods_Args9[] =
+{
+    {"view_desc", AR_QUAL_OUT, 0, LITEMPLATE_OBJECT, 0, LICOMPTYPE_RPS_TEXTURE_VIEW_DESC, 1, 1},
+};
+
+static const HLSL_INTRINSIC g_RpsTextureMethods[] =
+{
+    {(UINT)hlsl::IntrinsicOp::MOP_array, false, false, false, -1, 2, g_RpsTextureMethods_Args0},
+    {(UINT)hlsl::IntrinsicOp::MOP_array, false, false, false, -1, 3, g_RpsTextureMethods_Args1},
+    {(UINT)hlsl::IntrinsicOp::MOP_base, false, false, false, -1, 1, g_RpsTextureMethods_Args2},
+    {(UINT)hlsl::IntrinsicOp::MOP_desc, false, false, false, -1, 1, g_RpsTextureMethods_Args3},
+    {(UINT)hlsl::IntrinsicOp::MOP_format, false, false, false, -1, 2, g_RpsTextureMethods_Args4},
+    {(UINT)hlsl::IntrinsicOp::MOP_mips, false, false, false, -1, 2, g_RpsTextureMethods_Args5},
+    {(UINT)hlsl::IntrinsicOp::MOP_mips, false, false, false, -1, 3, g_RpsTextureMethods_Args6},
+    {(UINT)hlsl::IntrinsicOp::MOP_plane, false, false, false, -1, 2, g_RpsTextureMethods_Args7},
+    {(UINT)hlsl::IntrinsicOp::MOP_temporal, false, false, false, -1, 2, g_RpsTextureMethods_Args8},
+    {(UINT)hlsl::IntrinsicOp::MOP_view_desc, false, false, false, -1, 1, g_RpsTextureMethods_Args9},
+};
+
+//
+// Start of RpsBufferMethods
+//
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsBufferMethods_Args0[] =
+{
+    {"base", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_BUFFER, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsBufferMethods_Args1[] =
+{
+    {"bytes", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_BUFFER, 1, 1},
+    {"width", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT64, 1, 1},
+    {"size", AR_QUAL_IN, 2, LITEMPLATE_SCALAR, 2, LICOMPTYPE_UINT64, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsBufferMethods_Args2[] =
+{
+    {"desc", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_RESOURCE_DESC, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsBufferMethods_Args3[] =
+{
+    {"elements", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_BUFFER, 1, 1},
+    {"firstElement", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT64, 1, 1},
+    {"elementCount", AR_QUAL_IN, 2, LITEMPLATE_SCALAR, 2, LICOMPTYPE_UINT64, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsBufferMethods_Args4[] =
+{
+    {"format", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_BUFFER, 1, 1},
+    {"viewFormat", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsBufferMethods_Args5[] =
+{
+    {"stride", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_BUFFER, 1, 1},
+    {"structByteStride", AR_QUAL_IN, 1, LITEMPLATE_SCALAR, 1, LICOMPTYPE_UINT, 1, 1},
+};
+
+static const HLSL_INTRINSIC_ARGUMENT g_RpsBufferMethods_Args6[] =
+{
+    {"view_desc", AR_QUAL_OUT, 0, LITEMPLATE_SCALAR, 0, LICOMPTYPE_RPS_BUFFER_VIEW_DESC, 1, 1},
+};
+
+static const HLSL_INTRINSIC g_RpsBufferMethods[] =
+{
+    {(UINT)hlsl::IntrinsicOp::MOP_base, false, false, false, -1, 1, g_RpsBufferMethods_Args0},
+    {(UINT)hlsl::IntrinsicOp::MOP_bytes, false, false, false, -1, 3, g_RpsBufferMethods_Args1},
+    {(UINT)hlsl::IntrinsicOp::MOP_desc, false, false, false, -1, 1, g_RpsBufferMethods_Args2},
+    {(UINT)hlsl::IntrinsicOp::MOP_elements, false, false, false, -1, 3, g_RpsBufferMethods_Args3},
+    {(UINT)hlsl::IntrinsicOp::MOP_format, false, false, false, -1, 2, g_RpsBufferMethods_Args4},
+    {(UINT)hlsl::IntrinsicOp::MOP_stride, false, false, false, -1, 2, g_RpsBufferMethods_Args5},
+    {(UINT)hlsl::IntrinsicOp::MOP_view_desc, false, false, false, -1, 1, g_RpsBufferMethods_Args6},
+};
+
+//
 // Start of VkSubpassInputMethods
 //
 
@@ -6304,6 +6437,8 @@ static const UINT g_uRWTexture2DArrayMethodsCount = 4;
 static const UINT g_uRWTexture2DMethodsCount = 4;
 static const UINT g_uRWTexture3DMethodsCount = 4;
 static const UINT g_uRayQueryMethodsCount = 40;
+static const UINT g_uRpsBufferMethodsCount = 7;
+static const UINT g_uRpsTextureMethodsCount = 10;
 static const UINT g_uStreamMethodsCount = 2;
 static const UINT g_uStructuredBufferMethodsCount = 3;
 static const UINT g_uTexture1DArrayMethodsCount = 31;

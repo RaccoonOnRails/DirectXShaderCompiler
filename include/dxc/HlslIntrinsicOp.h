@@ -310,6 +310,17 @@ import hctdb_instrhelp
   MOP_TraceRayInline,
   MOP_WorldRayDirection,
   MOP_WorldRayOrigin,
+  MOP_array,
+  MOP_base,
+  MOP_desc,
+  MOP_format,
+  MOP_mips,
+  MOP_plane,
+  MOP_temporal,
+  MOP_view_desc,
+  MOP_bytes,
+  MOP_elements,
+  MOP_stride,
 #ifdef ENABLE_SPIRV_CODEGEN
   MOP_SubpassLoad,
 #endif // ENABLE_SPIRV_CODEGEN

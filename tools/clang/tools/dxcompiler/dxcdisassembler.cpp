@@ -1283,7 +1283,9 @@ static const char *OpCodeSignatures[] = {
   "(rayQueryHandle)",  // RayQuery_CandidateInstanceContributionToHitGroupIndex
   "(rayQueryHandle)",  // RayQuery_CommittedInstanceContributionToHitGroupIndex
   "(index,nonUniformIndex)",  // CreateHandleFromHeap
-  "(res,resourceClass,resourceKind,props)"  // AnnotateHandle
+  "(res,resourceClass,resourceKind,props)",  // AnnotateHandle
+  "(res,desc)",  // RpsHandleGetDesc
+  "(res,modifierKind,modifierArg0,modifierArg1,modifierArg2)"  // RpsResourceViewDerive
 };
 // OPCODE-SIGS:END
 

@@ -7055,5 +7055,70 @@ struct DxilInst_AnnotateHandle {
   llvm::Value *get_props() const { return Instr->getOperand(4); }
   void set_props(llvm::Value *val) { Instr->setOperand(4, val); }
 };
+
+/// This instruction RPS - get handle description
+struct DxilInst_RpsHandleGetDesc {
+  llvm::Instruction *Instr;
+  // Construction and identification
+  DxilInst_RpsHandleGetDesc(llvm::Instruction *pInstr) : Instr(pInstr) {}
+  operator bool() const {
+    return hlsl::OP::IsDxilOpFuncCallInst(Instr, hlsl::OP::OpCode::RpsHandleGetDesc);
+  }
+  // Validation support
+  bool isAllowed() const { return true; }
+  bool isArgumentListValid() const {
+    if (3 != llvm::dyn_cast<llvm::CallInst>(Instr)->getNumArgOperands()) return false;
+    return true;
+  }
+  // Metadata
+  bool requiresUniformInputs() const { return false; }
+  // Operand indexes
+  enum OperandIdx {
+    arg_res = 1,
+    arg_desc = 2,
+  };
+  // Accessors
+  llvm::Value *get_res() const { return Instr->getOperand(1); }
+  void set_res(llvm::Value *val) { Instr->setOperand(1, val); }
+  llvm::Value *get_desc() const { return Instr->getOperand(2); }
+  void set_desc(llvm::Value *val) { Instr->setOperand(2, val); }
+};
+
+/// This instruction derive new resource view from input view
+struct DxilInst_RpsResourceViewDerive {
+  llvm::Instruction *Instr;
+  // Construction and identification
+  DxilInst_RpsResourceViewDerive(llvm::Instruction *pInstr) : Instr(pInstr) {}
+  operator bool() const {
+    return hlsl::OP::IsDxilOpFuncCallInst(Instr, hlsl::OP::OpCode::RpsResourceViewDerive);
+  }
+  // Validation support
+  bool isAllowed() const { return true; }
+  bool isArgumentListValid() const {
+    if (6 != llvm::dyn_cast<llvm::CallInst>(Instr)->getNumArgOperands()) return false;
+    return true;
+  }
+  // Metadata
+  bool requiresUniformInputs() const { return false; }
+  // Operand indexes
+  enum OperandIdx {
+    arg_res = 1,
+    arg_modifierKind = 2,
+    arg_modifierArg0 = 3,
+    arg_modifierArg1 = 4,
+    arg_modifierArg2 = 5,
+  };
+  // Accessors
+  llvm::Value *get_res() const { return Instr->getOperand(1); }
+  void set_res(llvm::Value *val) { Instr->setOperand(1, val); }
+  llvm::Value *get_modifierKind() const { return Instr->getOperand(2); }
+  void set_modifierKind(llvm::Value *val) { Instr->setOperand(2, val); }
+  llvm::Value *get_modifierArg0() const { return Instr->getOperand(3); }
+  void set_modifierArg0(llvm::Value *val) { Instr->setOperand(3, val); }
+  llvm::Value *get_modifierArg1() const { return Instr->getOperand(4); }
+  void set_modifierArg1(llvm::Value *val) { Instr->setOperand(4, val); }
+  llvm::Value *get_modifierArg2() const { return Instr->getOperand(5); }
+  void set_modifierArg2(llvm::Value *val) { Instr->setOperand(5, val); }
+};
 // INSTR-HELPER:END
 } // namespace hlsl

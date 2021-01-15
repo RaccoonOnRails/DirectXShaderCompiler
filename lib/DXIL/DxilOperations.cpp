@@ -388,6 +388,10 @@ const OP::OpCodeProperty OP::m_OpCodeProps[(unsigned)OP::OpCode::NumOpCodes] = {
   // Get handle from heap                                                                                                    void,     h,     f,     d,    i1,    i8,   i16,   i32,   i64,   udt,   obj ,  function attribute
   {  OC::CreateHandleFromHeap,    "CreateHandleFromHeap",     OCC::CreateHandleFromHeap,     "createHandleFromHeap",      {  true, false, false, false, false, false, false, false, false, false, false}, Attribute::ReadOnly, },
   {  OC::AnnotateHandle,          "AnnotateHandle",           OCC::AnnotateHandle,           "annotateHandle",            {  true, false, false, false, false, false, false, false, false, false, false}, Attribute::ReadNone, },
+
+  //                                                                                                                         void,     h,     f,     d,    i1,    i8,   i16,   i32,   i64,   udt,   obj ,  function attribute
+  {  OC::RpsHandleGetDesc,        "RpsHandleGetDesc",         OCC::RpsHandleGetDesc,         "rpsHandleGetDesc",          { false, false, false, false, false, false, false, false, false,  true, false}, Attribute::None,     },
+  {  OC::RpsResourceViewDerive,   "RpsResourceViewDerive",    OCC::RpsResourceViewDerive,    "rpsResourceViewDerive",     { false, false, false, false, false, false, false,  true, false, false, false}, Attribute::ReadOnly, },
 };
 // OPCODE-OLOADS:END
 
@@ -1320,6 +1324,10 @@ Function *OP::GetOpFunc(OpCode opCode, Type *pOverloadType) {
     // Get handle from heap
   case OpCode::CreateHandleFromHeap:   A(pRes);     A(pI32); A(pI32); A(pI1);  break;
   case OpCode::AnnotateHandle:         A(pRes);     A(pI32); A(pRes); A(pI8);  A(pI8);  A(resProperty);break;
+
+    // 
+  case OpCode::RpsHandleGetDesc:       A(pV);       A(pI32); A(pRes); A(udt);  break;
+  case OpCode::RpsResourceViewDerive:  A(pRes);     A(pI32); A(pRes); A(pI8);  A(pI32); A(pI32); A(pI32); break;
   // OPCODE-OLOAD-FUNCS:END
   default: DXASSERT(false, "otherwise unhandled case"); break;
   }
@@ -1403,6 +1411,7 @@ llvm::Type *OP::GetOverloadType(OpCode opCode, llvm::Function *F) {
   // OPCODE-OLOAD-TYPES:BEGIN
   case OpCode::TempRegStore:
   case OpCode::CallShader:
+  case OpCode::RpsHandleGetDesc:
     DXASSERT_NOMSG(FT->getNumParams() > 2);
     return FT->getParamType(2);
   case OpCode::MinPrecXRegStore:
@@ -1527,6 +1536,7 @@ llvm::Type *OP::GetOverloadType(OpCode opCode, llvm::Function *F) {
   case OpCode::GeometryIndex:
   case OpCode::RayQuery_CandidateInstanceContributionToHitGroupIndex:
   case OpCode::RayQuery_CommittedInstanceContributionToHitGroupIndex:
+  case OpCode::RpsResourceViewDerive:
     return IntegerType::get(m_Ctx, 32);
   case OpCode::CalculateLOD:
   case OpCode::DomainLocation:

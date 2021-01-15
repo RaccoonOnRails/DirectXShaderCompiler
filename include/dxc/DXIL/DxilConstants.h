@@ -372,6 +372,10 @@ namespace DXIL {
   // OPCODE-ENUM:BEGIN
   // Enumeration for operations specified by DXIL
   enum class OpCode : unsigned {
+    // 
+    RpsHandleGetDesc = 218, // RPS - get handle description
+    RpsResourceViewDerive = 219, // derive new resource view from input view
+  
     // Amplification shader instructions
     DispatchMesh = 173, // Amplification shader intrinsic DispatchMesh
   
@@ -700,9 +704,9 @@ namespace DXIL {
     NumOpCodes_Dxil_1_3 = 162,
     NumOpCodes_Dxil_1_4 = 165,
     NumOpCodes_Dxil_1_5 = 216,
-    NumOpCodes_Dxil_1_6 = 218,
+    NumOpCodes_Dxil_1_6 = 220,
   
-    NumOpCodes = 218 // exclusive last value of enumeration
+    NumOpCodes = 220 // exclusive last value of enumeration
   };
   // OPCODE-ENUM:END
 
@@ -710,6 +714,10 @@ namespace DXIL {
   // OPCODECLASS-ENUM:BEGIN
   // Groups for DXIL operations with equivalent function templates
   enum class OpCodeClass : unsigned {
+    // 
+    RpsHandleGetDesc,
+    RpsResourceViewDerive,
+  
     // Amplification shader instructions
     DispatchMesh,
   
@@ -953,9 +961,9 @@ namespace DXIL {
     NumOpClasses_Dxil_1_3 = 118,
     NumOpClasses_Dxil_1_4 = 120,
     NumOpClasses_Dxil_1_5 = 143,
-    NumOpClasses_Dxil_1_6 = 145,
+    NumOpClasses_Dxil_1_6 = 147,
   
-    NumOpClasses = 145 // exclusive last value of enumeration
+    NumOpClasses = 147 // exclusive last value of enumeration
   };
   // OPCODECLASS-ENUM:END
 
@@ -1491,6 +1499,72 @@ namespace DXIL {
       RPS_RESOURCE_ACCESS_RAYTRACING_SHADER_BIT   = RPS_RESOURCE_ACCESS_COMPUTE_SHADER_BIT,
       RPS_RESOURCE_ACCESS_PREDICATION_BIT         = RPS_RESOURCE_ACCESS_INDIRECT_ARGS_BIT,
       RPS_RESOURCE_ACCESS_STREAMOUT_BIT           = RPS_RESOURCE_ACCESS_NONE,
+    };
+
+    enum RPS_VIEW_MODIFIER_TYPE {
+      RPS_VIEW_MODIFIER_NONE = 0,
+      RPS_VIEW_MODIFIER_GET_BASE,
+      RPS_VIEW_MODIFIER_FORMAT,
+      RPS_VIEW_MODIFIER_PLANE,
+      RPS_VIEW_MODIFIER_TEMPORAL_LAYER,
+      RPS_VIEW_MODIFIER_STRUCT_STRIDE,
+      RPS_VIEW_MODIFIER_ARRAY_RANGE,
+      RPS_VIEW_MODIFIER_MIPS_RANGE,
+      RPS_VIEW_MODIFIER_ELEMENT_RANGE,
+      RPS_VIEW_MODIFIER_BYTE_RANGE,
+    };
+
+    enum RPS_RESOURCE_TYPE {
+      RPS_RESOURCE_TYPE_BUFFER,
+      RPS_RESOURCE_TYPE_TEX1D,
+      RPS_RESOURCE_TYPE_TEX2D,
+      RPS_RESOURCE_TYPE_TEX3D,
+    };
+
+    enum RPS_RESOURCE_FLAGS {
+      RPS_RESOURCE_FLAG_NONE                 = 0,
+      RPS_RESOURCE_FLAG_PERSISTENT           = 1 << 0,
+      RPS_RESOURCE_FLAG_DEDICATED_ALLOCATION = 1 << 1,
+      RPS_RESOURCE_FLAG_SYTEM_MEMORY         = 1 << 2,
+      RPS_RESOURCE_FLAG_CUBEMAP_COMPATIBLE   = 1 << 3,
+    };
+
+    enum RpsCommandTypeFlagBits {
+      RPS_COMMAND_TYPE_NO_FLAGS                   = 0,            ///< No flags.
+      RPS_COMMAND_TYPE_GRAPHICS_BIT               = (1 << 1),     ///< The command is graphics only.
+      RPS_COMMAND_TYPE_COMPUTE_BIT                = (1 << 2),     ///< The command is compute only.
+      RPS_COMMAND_TYPE_COPY_BIT                   = (1 << 3),     ///< The command is copy only.
+      RPS_COMMAND_TYPE_RESOLVE_BIT                = (1 << 4),     ///< The command is resolve only.
+      RPS_COMMAND_TYPE_CALLBACK_BIT               = (1 << 5),     ///< The command is a callback, no setup.
+      RPS_COMMAND_TYPE_CMD_BUF_BIT                = (1 << 6),     ///< The command submits prebuilt cmd bufs.
+      RPS_COMMAND_TYPE_PREFER_ASYNC_BIT           = (1 << 7),     ///< The command type prefers to run on an async queue.
+      RPS_COMMAND_TYPE_CUSTOM_VIEWPORT_BIT        = (1 << 8),     ///< The callback will set a custom viewport & scissor.
+      RPS_COMMAND_TYPE_EXTERNAL_WRITE_BIT         = (1 << 9),     ///< Command does some external write, such as updating debug CPU data.
+    };
+
+    enum class RpsBasicType : uint8_t {
+      RPS_TYPE_UNKNOWN,
+      RPS_TYPE_BOOL,
+      RPS_TYPE_SINT,
+      RPS_TYPE_UINT,
+      RPS_TYPE_FLOAT,
+      RPS_TYPE_STRUCT,
+      RPS_TYPE_HANDLE,
+    };
+
+    enum class RpsIntrinsicEntry {
+      NODE_CALL = 0,
+      PARAM_PUSH,
+      CREATE_HANDLE,
+      DESCRIBE_HANDLE,
+      DERIVE_HANDLE,
+      COUNT,
+    };
+
+    enum class RpsDescribeHandleOp {
+      Resource = 1,
+      TextureView = 2,
+      BufferView = 3,
     };
   }
   // RPS Change Ends

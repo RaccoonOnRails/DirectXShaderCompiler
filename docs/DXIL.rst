@@ -2313,6 +2313,8 @@ ID  Name                                                  Description
 215 RayQuery_CommittedInstanceContributionToHitGroupIndex returns committed hit InstanceContributionToHitGroupIndex
 216 CreateHandleFromHeap                                  create resource handle from heap
 217 AnnotateHandle                                        annotate handle with resource properties
+218 RpsHandleGetDesc                                      RPS - get handle description
+219 RpsResourceViewDerive                                 derive new resource view from input view
 === ===================================================== =======================================================================================================================================================================================================================
 
 

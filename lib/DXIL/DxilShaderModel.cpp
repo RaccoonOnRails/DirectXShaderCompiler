@@ -158,7 +158,13 @@ const ShaderModel *ShaderModel::Get(Kind Kind, unsigned Major, unsigned Minor) {
   {853510,70}, //ms_6_6
   {919045,71}, //as_6_5
   {919046,72}, //as_6_6
-  {984576,73}, //rps_6_0  // RPS Change
+  {984576,73}, //rps_6_0
+  {984577,74}, //rps_6_1
+  {984578,75}, //rps_6_2
+  {984579,76}, //rps_6_3
+  {984580,77}, //rps_6_4
+  {984581,78}, //rps_6_5
+  {984582,79}, //rps_6_6
   };
   unsigned hash = (unsigned)Kind << 16 | Major << 8 | Minor;
   auto it = hashToIdxMap.find(hash);
@@ -438,7 +444,13 @@ const ShaderModel ShaderModel::ms_ShaderModels[kNumShaderModels] = {
   SM(Kind::Mesh, 6, 6, "ms_6_6", 0, 0, true, true, UINT_MAX),
   SM(Kind::Amplification, 6, 5, "as_6_5", 0, 0, true, true, UINT_MAX),
   SM(Kind::Amplification, 6, 6, "as_6_6", 0, 0, true, true, UINT_MAX),
-  SM(Kind::RenderPipeline, 6, 0, "rps_6_0", 0, 0, true, true, UINT_MAX), // RPS Change
+  SM(Kind::RenderPipeline, 6, 0, "rps_6_0", 0, 0, true, true, UINT_MAX),
+  SM(Kind::RenderPipeline, 6, 1, "rps_6_1", 0, 0, true, true, UINT_MAX),
+  SM(Kind::RenderPipeline, 6, 2, "rps_6_2", 0, 0, true, true, UINT_MAX),
+  SM(Kind::RenderPipeline, 6, 3, "rps_6_3", 0, 0, true, true, UINT_MAX),
+  SM(Kind::RenderPipeline, 6, 4, "rps_6_4", 0, 0, true, true, UINT_MAX),
+  SM(Kind::RenderPipeline, 6, 5, "rps_6_5", 0, 0, true, true, UINT_MAX),
+  SM(Kind::RenderPipeline, 6, 6, "rps_6_6", 0, 0, true, true, UINT_MAX),
   // Values before Invalid must remain sorted by Kind, then Major, then Minor.
   SM(Kind::Invalid,  0, 0, "invalid", 0,  0,   false, false, 0),
   // VALRULE-TEXT:END
