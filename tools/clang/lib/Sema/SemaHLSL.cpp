@@ -213,6 +213,10 @@ enum ArBasicKind {
   AR_OBJECT_RPS_NULLHANDLE,
   AR_OBJECT_RPS_BUFFER,
   AR_OBJECT_RPS_TEXTURE,
+  AR_OBJECT_RPS_SUBRESOURCE_RANGE,
+  AR_OBJECT_RPS_RESOURCE_DESC,
+  AR_OBJECT_RPS_TEXTURE_VIEW_DESC,
+  AR_OBJECT_RPS_BUFFER_VIEW_DESC,
   // RPS Change Ends
 
   AR_BASIC_MAXIMUM_COUNT
@@ -504,6 +508,10 @@ const UINT g_uBasicKindProps[] =
   BPROP_OBJECT,                     //AR_OBJECT_RPS_NULLHANDLE,
   BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_BUFFER,
   BPROP_OBJECT | BPROP_RWBUFFER,    //AR_OBJECT_RPS_TEXTURE,
+  0,                                //AR_OBJECT_RPS_SUBRESOURCE_RANGE,
+  LICOMPTYPE_RPS_RESOURCE_DESC,     //AR_OBJECT_RPS_RESOURCE_DESC,
+  LICOMPTYPE_RPS_TEXTURE_VIEW_DESC, //AR_OBJECT_RPS_TEXTURE_VIEW_DESC,
+  LICOMPTYPE_RPS_BUFFER_VIEW_DESC,  //AR_OBJECT_RPS_BUFFER_VIEW_DESC,
   // RPS Change Ends
 
   // AR_BASIC_MAXIMUM_COUNT
@@ -1212,6 +1220,43 @@ static const ArBasicKind g_Numeric16OnlyCT[] =
   AR_BASIC_UNKNOWN
 };
 
+// RPS Change Starts
+static const ArBasicKind g_RpsBufferCT[] =
+{
+  AR_OBJECT_RPS_BUFFER,
+  AR_BASIC_UNKNOWN
+};
+
+static const ArBasicKind g_RpsTextureCT[] =
+{
+  AR_OBJECT_RPS_TEXTURE,
+  AR_BASIC_UNKNOWN
+};
+
+static const ArBasicKind g_RpsSubResourceRangeCT[] =
+{
+  AR_OBJECT_RPS_SUBRESOURCE_RANGE,
+  AR_BASIC_UNKNOWN
+};
+
+static const ArBasicKind g_RpsResourceDescCT[] =
+{
+  AR_OBJECT_RPS_RESOURCE_DESC,
+  AR_BASIC_UNKNOWN
+};
+static const ArBasicKind g_RpsTextureViewDescCT[] =
+{
+  AR_OBJECT_RPS_TEXTURE_VIEW_DESC,
+  AR_BASIC_UNKNOWN
+};
+static const ArBasicKind g_RpsBufferViewDescCT[] =
+{
+  AR_OBJECT_RPS_BUFFER_VIEW_DESC,
+  AR_BASIC_UNKNOWN
+};
+
+// RPS Change Ends
+
 // Basic kinds, indexed by a LEGAL_INTRINSIC_COMPTYPES value.
 const ArBasicKind* g_LegalIntrinsicCompTypes[] =
 {
@@ -1251,6 +1296,14 @@ const ArBasicKind* g_LegalIntrinsicCompTypes[] =
   g_Texture2DCT,        // LICOMPTYPE_TEXTURE2D
   g_Texture2DArrayCT,   // LICOMPTYPE_TEXTURE2DARRAY
   g_ResourceCT,         // LICOMPTYPE_RESOURCE
+
+  // RPS Change Starts
+  g_RpsBufferCT,        //LICOMPTYPE_RPS_BUFFER = 36,
+  g_RpsTextureCT,       //LICOMPTYPE_RPS_TEXTURE = 37,
+  g_RpsResourceDescCT,  //LICOMPTYPE_RPS_RESOURCE_DESC = 39,
+  g_RpsTextureViewDescCT,   //LICOMPTYPE_RPS_TEXTURE_VIEW_DESC = 40,
+  g_RpsBufferViewDescCT,//LICOMPTYPE_RPS_BUFFER_VIEW_DESC = 41,
+  // RPS Change Ends
 };
 static_assert(ARRAYSIZE(g_LegalIntrinsicCompTypes) == LICOMPTYPE_COUNT,
   "Intrinsic comp type table must be updated when new enumerants are added.");
@@ -1348,6 +1401,10 @@ const ArBasicKind g_ArBasicKindsAsTypes[] =
   AR_OBJECT_RPS_NULLHANDLE,
   AR_OBJECT_RPS_BUFFER,
   AR_OBJECT_RPS_TEXTURE,
+  AR_OBJECT_RPS_SUBRESOURCE_RANGE,
+  AR_OBJECT_RPS_RESOURCE_DESC,
+  AR_OBJECT_RPS_TEXTURE_VIEW_DESC,
+  AR_OBJECT_RPS_BUFFER_VIEW_DESC,
   // RPS Change Ends
 };
 
@@ -1440,6 +1497,10 @@ const uint8_t g_ArBasicKindsTemplateCount[] =
   0, // AR_OBJECT_RPS_NULLHANDLE,
   0, // AR_OBJECT_RPS_BUFFER,
   0, // AR_OBJECT_RPS_TEXTURE,
+  0, // AR_OBJECT_RPS_SUBRESOURCE_RANGE,
+  0, // AR_OBJECT_RPS_RESOURCE_DESC,
+  0, // AR_OBJECT_RPS_TEXTURE_VIEW_DESC,
+  0, // AR_OBJECT_RPS_BUFFER_VIEW_DESC,
   // RPS Change Ends
 };
 
@@ -1542,6 +1603,10 @@ const SubscriptOperatorRecord g_ArBasicKindsSubscripts[] =
   { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_NULLHANDLE,
   { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_BUFFER,
   { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_TEXTURE,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_SUBRESOURCE_RANGE,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_RESOURCE_DESC,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_TEXTURE_VIEW_DESC,
+  { 0, MipsFalse, SampleFalse },  // AR_OBJECT_RPS_BUFFER_VIEW_DESC,
   // RPS Change Ends
 };
 
@@ -1668,6 +1733,10 @@ const char* g_ArBasicTypeNames[] =
   "null_t",
   "buffer",
   "texture",
+  "SubResourceRange",
+  "ResourceDesc",
+  "TextureViewDesc",
+  "BufferViewDesc",
   // RPS Change Ends
 };
 
@@ -2289,6 +2358,16 @@ void GetIntrinsicMethods(ArBasicKind kind, _Outptr_result_buffer_(*intrinsicCoun
     *intrinsics = g_RayQueryMethods;
     *intrinsicCount = _countof(g_RayQueryMethods);
     break;
+    // RPS Change Starts
+  case AR_OBJECT_RPS_TEXTURE:
+    *intrinsics = g_RpsTextureMethods;
+    *intrinsicCount = _countof(g_RpsTextureMethods);
+    break;
+  case AR_OBJECT_RPS_BUFFER:
+    *intrinsics = g_RpsBufferMethods;
+    *intrinsicCount = _countof(g_RpsBufferMethods);
+    break;
+    // RPS Change Ends
     // SPIRV change starts
 #ifdef ENABLE_SPIRV_CODEGEN
   case AR_OBJECT_VK_SUBPASS_INPUT:
@@ -3428,6 +3507,18 @@ private:
       else if (kind == AR_OBJECT_FEEDBACKTEXTURE2D_ARRAY) {
         recordDecl = DeclareUIntTemplatedTypeWithHandle(*m_context, "FeedbackTexture2DArray", "kind");
       }
+      // RPS Change Starts
+      else if (kind == AR_OBJECT_RPS_SUBRESOURCE_RANGE) {
+        recordDecl = DeclareRpsSubResourceRangeType(*m_context);
+      } else if (kind == AR_OBJECT_RPS_RESOURCE_DESC) {
+        recordDecl = DeclareRpsResourceDescType(*m_context);
+      } else if (kind == AR_OBJECT_RPS_TEXTURE_VIEW_DESC) {
+        recordDecl = DeclareRpsTextureViewDescType(
+            *m_context, GetBasicKindType(AR_OBJECT_RPS_SUBRESOURCE_RANGE));
+      } else if (kind == AR_OBJECT_RPS_BUFFER_VIEW_DESC) {
+        recordDecl = DeclareRpsBufferViewDescType(*m_context);
+      }
+      // RPS Change Ends
       else if (templateArgCount == 0) {
         recordDecl = DeclareRecordTypeWithHandle(*m_context, typeName);
       }
@@ -3770,6 +3861,13 @@ public:
           ArBasicKind kind  = g_ArBasicKindsAsTypes[index];
           if ( AR_OBJECT_RAY_DESC == kind || AR_OBJECT_TRIANGLE_INTERSECTION_ATTRIBUTES == kind)
             return AR_TOBJ_COMPOUND;
+          // RPS Change Starts
+          if (AR_OBJECT_RPS_RESOURCE_DESC == kind ||
+              AR_OBJECT_RPS_TEXTURE_VIEW_DESC == kind ||
+              AR_OBJECT_RPS_BUFFER_VIEW_DESC == kind) {
+            return AR_TOBJ_COMPOUND;
+          }
+          // RPS Change Ends
         }
         return AR_TOBJ_OBJECT;
       }
@@ -4129,6 +4227,10 @@ public:
     case AR_OBJECT_RPS_NULLHANDLE:
     case AR_OBJECT_RPS_BUFFER:
     case AR_OBJECT_RPS_TEXTURE:
+    case AR_OBJECT_RPS_SUBRESOURCE_RANGE:
+    case AR_OBJECT_RPS_RESOURCE_DESC:
+    case AR_OBJECT_RPS_TEXTURE_VIEW_DESC:
+    case AR_OBJECT_RPS_BUFFER_VIEW_DESC:
     // RPS Change Ends
     {
         const ArBasicKind* match = std::find(g_ArBasicKindsAsTypes, &g_ArBasicKindsAsTypes[_countof(g_ArBasicKindsAsTypes)], kind);
@@ -4840,7 +4942,7 @@ public:
 
     // RPS Change Starts
     if (IsRPSViewHandleKind(kind)) {
-       //AddRpsViewSlicingSubscripts(kind, typeDecl, recordDecl);
+      AddRPSViewHandleMethods(kind, recordDecl);
     }
     // RPS Change Ends
 
@@ -4850,6 +4952,114 @@ public:
   }
 
   // RPS Change Starts
+
+  typedef std::pair<QualType, Expr *> RpsMethodCreateParamInfo;
+
+  CXXMethodDecl *
+  AddRpsStaticMethod(StringRef FnName, QualType RetType,
+                     ArrayRef<RpsMethodCreateParamInfo> ParamInfo,
+                     CXXRecordDecl *RecDecl, QualType handleType) {
+
+    IdentifierInfo &functionId =
+        m_context->Idents.get(FnName, tok::TokenKind::identifier);
+    DeclarationName functionName(&functionId);
+    DeclarationNameInfo NameInfo(functionName, NoLoc);
+
+    SmallVector<QualType, 16> ParamTypes;
+    SmallVector<Expr *, 16> DefaultParams;
+    ParamTypes.resize(ParamInfo.size());
+    DefaultParams.resize(ParamInfo.size());
+
+    for (uint32_t i = 0; i < ParamInfo.size(); i++) {
+      ParamTypes[i] = ParamInfo[i].first;
+      DefaultParams[i] = ParamInfo[i].second;
+    }
+
+    QualType FnType = m_context->getFunctionType(
+        RetType, ParamTypes, FunctionProtoType::ExtProtoInfo(), None);
+
+    CXXMethodDecl *result =
+        CXXMethodDecl::Create(*m_context, RecDecl, NoLoc, NameInfo, FnType,
+                              m_context->getTrivialTypeSourceInfo(FnType),
+                              SC_Static, false, false, NoLoc);
+
+    SmallVector<ParmVarDecl*, 16> ParamVarDecls;
+    ParamVarDecls.resize(ParamInfo.size());
+
+    for (uint32_t i = 0; i < ParamInfo.size(); i++) {
+      ParamVarDecls[i] = ParmVarDecl::Create(
+          *m_context, nullptr, NoLoc, NoLoc, nullptr, ParamTypes[i], nullptr,
+          SC_Extern, DefaultParams[i], ParameterModifier());
+      ParamVarDecls[i]->setOwningFunction(result);
+    }
+    result->setParams(ParamVarDecls);
+
+    // Adjust access.
+    result->setAccess(AccessSpecifier::AS_public);
+
+    
+    bool isStatic = result->isStatic();
+
+    return result;
+  }
+
+  void AddRPSViewHandleMethods(ArBasicKind kind, CXXRecordDecl* RecDecl) {
+    QualType handleType = GetBasicKindType(kind);
+    QualType uint32Ty = GetBasicKindType(AR_BASIC_UINT32);
+    QualType uint64Ty = GetBasicKindType(AR_BASIC_UINT64);
+
+    Expr *LitExpr0= IntegerLiteral::Create(
+        *m_context, llvm::APInt(32, 0ULL), uint32Ty, NoLoc);
+    Expr *LitExpr1 = IntegerLiteral::Create(
+        *m_context, llvm::APInt(32, 1ULL), uint32Ty, NoLoc);
+
+    if (kind == AR_OBJECT_RPS_TEXTURE) {
+
+      const RpsMethodCreateParamInfo create1DParams[] = {
+        { uint32Ty, nullptr },  // RPS_FORMAT format,
+        { uint32Ty, nullptr },  // uint width,
+        { uint32Ty, LitExpr1 }, // uint numMips = 1,
+        { uint32Ty, LitExpr1 }, // uint arraySlices = 1,
+        { uint32Ty, LitExpr1 }, // uint numTemporalLayers = 1,
+        { uint32Ty, LitExpr0 }, // RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE
+      };
+
+      const RpsMethodCreateParamInfo create2DParams[] = {
+        { uint32Ty, nullptr },  // RPS_FORMAT format,
+        { uint32Ty, nullptr },  // uint width,
+        { uint32Ty, nullptr },  // uint height,
+        { uint32Ty, LitExpr1 }, // uint numMips = 1,
+        { uint32Ty, LitExpr1 }, // uint arraySlices = 1,
+        { uint32Ty, LitExpr1 }, // uint numTemporalLayers = 1,
+        { uint32Ty, LitExpr1 }, // uint sampleCount = 1,
+        { uint32Ty, LitExpr0 }, // uint sampleQuality = 0,
+        { uint32Ty, LitExpr0 }, // RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE
+      };
+
+      const RpsMethodCreateParamInfo create3DParams[] = {
+        { uint32Ty, nullptr },  // RPS_FORMAT format,
+        { uint32Ty, nullptr },  // uint width,
+        { uint32Ty, nullptr },  // uint height,
+        { uint32Ty, nullptr },  // uint depth,
+        { uint32Ty, LitExpr1 }, // uint numMips = 1,
+        { uint32Ty, LitExpr1 }, // uint numTemporalLayers = 1,
+        { uint32Ty, LitExpr0 }, // RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE
+      };
+
+      AddRpsStaticMethod("create1D", handleType, create1DParams, RecDecl, handleType);
+      AddRpsStaticMethod("create2D", handleType, create2DParams, RecDecl, handleType);
+      AddRpsStaticMethod("create3D", handleType, create3DParams, RecDecl, handleType);
+
+    } else if (kind == AR_OBJECT_RPS_BUFFER) {
+
+      const RpsMethodCreateParamInfo createBufParams[] = {
+        { uint64Ty, nullptr },  // uint64_t width,
+        { uint32Ty, LitExpr1 }, // uint numTemporalLayers = 1,
+        { uint32Ty, LitExpr0 }, // RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE
+      };
+      AddRpsStaticMethod("create", handleType, createBufParams, RecDecl, handleType);
+    }
+  }
 
   ExprResult AddRPSSetResourceNameCall(const ValueDecl *ValueDecl,
                                        Expr *Initializer) {

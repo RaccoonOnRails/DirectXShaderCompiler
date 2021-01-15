@@ -245,55 +245,6 @@ __RPS_BEGIN_DECL_ENUM(clear)
     __RPS_ENUM_VALUE(uav_uint     , 1 << 4)
 __RPS_END_DECL_ENUM()
 
-struct SampleDesc
-{
-    uint Count;
-    uint Quality;
-};
-
-struct ResourceDesc
-{
-    rps::resource_type Dimension;
-    rps::resource_flags Flags;
-    rps::format Format;
-    uint64_t Width;
-    uint Height;
-    uint DepthOrArraySize;
-    uint MipLevels;
-    SampleDesc SampleDesc;
-    uint TemporalLayers;
-};
-
-struct SubResourceRange
-{
-    uint BaseMip;
-    uint Mips;
-    uint BaseArraySlice;
-    uint ArrayLayers;
-    uint PlaneMask;
-    uint TemporalLayer;
-};
-
-struct BufferRange
-{
-    uint64_t Offset;
-    uint64_t SizeInBytes;
-    uint TemporalLayer;
-};
-
-struct TextureViewDesc
-{
-    rps::format Format;
-    SubResourceRange Range;
-};
-
-struct BufferViewDesc
-{
-    rps::format Format;
-    uint StructureByteStride;
-    BufferRange Range;
-};
-
 texture __rps_set_resource_name(texture r, uint nameOffset, uint nameLength);
 buffer __rps_set_resource_name(buffer r, uint nameOffset, uint nameLength);
 
@@ -311,52 +262,68 @@ buffer           view_buffer            ( buffer b, BufferViewDesc desc );
 void             clear_texture          ( texture t, rps::clear option, uint4 data );
 void             clear_buffer           ( buffer b, rps::clear option, uint4 data );
 
-inline texture create_tex2d( rps::format format, uint width, uint height, uint numMips = 1, uint arraySlices = 1, uint numTemporalLayers = 1, uint sampleCount = 1, uint sampleQuality = 0, rps::resource_flags flags = rps::resource_flags::none )
+inline texture create_tex2d(
+    RPS_FORMAT format,
+    uint width,
+    uint height,
+    uint numMips = 1,
+    uint arraySlices = 1,
+    uint numTemporalLayers = 1,
+    uint sampleCount = 1,
+    uint sampleQuality = 0,
+    RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE )
 {
     ResourceDesc desc;
-    desc.Dimension = rps::resource_type::tex2d;
+    desc.Dimension = RPS_RESOURCE_TEX2D;
     desc.Flags = flags;
     desc.Format = format;
     desc.Width = width;
     desc.Height = height;
     desc.DepthOrArraySize = arraySlices;
     desc.MipLevels = numMips;
-    desc.SampleDesc.Count = sampleCount;
-    desc.SampleDesc.Quality = sampleQuality;
+    desc.SampleCount = sampleCount;
+    desc.SampleQuality = sampleQuality;
     desc.TemporalLayers = numTemporalLayers;
 
     return create_texture(desc);
 }
 
-inline texture create_tex3d( rps::format format, uint width, uint height, uint depth, uint numMips = 1, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
+inline texture create_tex3d(
+    RPS_FORMAT format,
+    uint width,
+    uint height,
+    uint depth,
+    uint numMips = 1,
+    uint numTemporalLayers = 1,
+    RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE )
 {
     ResourceDesc desc;
-    desc.Dimension = rps::resource_type::tex2d;
+    desc.Dimension = RPS_RESOURCE_TEX3D;
     desc.Flags = flags;
     desc.Format = format;
     desc.Width = width;
     desc.Height = height;
     desc.DepthOrArraySize = depth;
     desc.MipLevels = numMips;
-    desc.SampleDesc.Count = 1;
-    desc.SampleDesc.Quality = 0;
+    desc.SampleCount = 1;
+    desc.SampleQuality = 0;
     desc.TemporalLayers = numTemporalLayers;
 
     return create_texture(desc);
 }
 
-inline texture create_buffer( uint64_t width, uint numTemporalLayers = 1, rps::resource_flags flags = rps::resource_flags::none )
+inline texture create_buffer( uint64_t width, uint numTemporalLayers = 1, RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE )
 {
     ResourceDesc desc;
-    desc.Dimension = rps::resource_type::buffer;
+    desc.Dimension = RPS_RESOURCE_BUFFER;
     desc.Flags = flags;
-    desc.Format = rps::format::unknown;
+    desc.Format = RPS_FORMAT_UNKNOWN;
     desc.Width = width;
     desc.Height = 1;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
-    desc.SampleDesc.Count = 1;
-    desc.SampleDesc.Quality = 0;
+    desc.SampleCount = 1;
+    desc.SampleQuality = 0;
     desc.TemporalLayers = numTemporalLayers;
 
     return create_texture(desc);
@@ -364,10 +331,10 @@ inline texture create_buffer( uint64_t width, uint numTemporalLayers = 1, rps::r
 
 inline SubResourceRange make_texture_range( uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0 )
 {
-    SubResourceRange range = (SubResourceRange)0;
+    SubResourceRange range;
 
     range.BaseMip        = baseMip;
-    range.Mips           = mipLevels;
+    range.MipLevels      = mipLevels;
     range.BaseArraySlice = baseArraySlice;
     range.ArrayLayers    = numArraySlices;
     range.PlaneMask      = planeMask;
@@ -376,31 +343,38 @@ inline SubResourceRange make_texture_range( uint baseMip, uint mipLevels = 1, ui
     return range;
 }
 
-inline BufferRange make_buffer_range( uint64_t offset, uint64_t sizeInBytes = 0, uint temporalLayer = 0 )
-{
-    BufferRange range = (BufferRange)0;
-
-    range.Offset        = offset;
-    range.SizeInBytes   = sizeInBytes;
-    range.TemporalLayer = temporalLayer;
-
-    return range;
-}
-
-inline texture create_texture_view( texture r, uint baseMip = 0, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0, rps::format format = rps::format::unknown )
+inline texture create_texture_view(
+    texture r,
+    uint baseMip = 0,
+    uint mipLevels = 1,
+    uint baseArraySlice = 0,
+    uint numArraySlices = 1,
+    uint planeMask = 1,
+    uint temporalLayer = 0,
+    RPS_FORMAT format = RPS_FORMAT_UNKNOWN )
 {
     TextureViewDesc desc;
-    desc.Format = format;
     desc.Range = make_texture_range( baseMip, mipLevels, baseArraySlice, numArraySlices, planeMask, temporalLayer );
+    desc.Format = format;
 
     return view_texture( r, desc );
 }
 
-inline buffer create_buffer_view( buffer r, uint64_t offset = 0, uint64_t sizeInBytes = 0, uint temporalLayer = 0, rps::format format = rps::format::unknown )
+inline buffer create_buffer_view(
+    buffer r,
+    uint64_t offset = 0,
+    uint64_t sizeInBytes = 0,
+    uint temporalLayer = 0,
+    RPS_FORMAT format = RPS_FORMAT_UNKNOWN,
+    uint structureStride = 0 )
 {
     BufferViewDesc desc;
-    desc.Format = format;
-    desc.Range = make_buffer_range( offset, sizeInBytes, temporalLayer );
+
+    desc.Offset        = offset;
+    desc.SizeInBytes   = sizeInBytes;
+    desc.Format        = format;
+    desc.TemporalLayer = temporalLayer;
+    desc.StructureByteStride = structureStride;
 
     return view_buffer( r, desc );
 }
