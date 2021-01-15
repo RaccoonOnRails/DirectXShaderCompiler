@@ -121,7 +121,7 @@ uint __rps_asyncmarker();
 #define uav         [readwrite(ps, cs)] texture
 #define uav_buf     [readwrite(ps, cs)] buffer
 
-#define __RPS_BEGIN_DECL_ENUM(X) namespace rps { enum class X {
+#define __RPS_BEGIN_DECL_ENUM(X) namespace rps { enum X {
 #define __RPS_ENUM_VALUE(N, V) N = (V),
 #define __RPS_END_DECL_ENUM() }; }
 
@@ -248,11 +248,11 @@ __RPS_END_DECL_ENUM()
 texture __rps_set_resource_name(texture r, uint nameOffset, uint nameLength);
 buffer __rps_set_resource_name(buffer r, uint nameOffset, uint nameLength);
 
-ResourceDesc     describe_texture       ( texture t );
-ResourceDesc     describe_buffer        ( buffer b  );
+ResourceDesc     describe_texture       ( texture t ) { return t.desc(); }
+ResourceDesc     describe_buffer        ( buffer b  ) { return b.desc(); }
 
-TextureViewDesc  describe_texture_view  ( texture t );
-BufferViewDesc   describe_buffer_view   ( buffer b  );
+TextureViewDesc  describe_texture_view  ( texture t ) { return t.view_desc(); }
+BufferViewDesc   describe_buffer_view   ( buffer b  ) { return b.view_desc(); }
 
 texture          create_texture         ( ResourceDesc desc );
 texture          view_texture           ( texture t, TextureViewDesc desc );
