@@ -1135,6 +1135,25 @@ bool SROA_HLSL::performScalarRepl(Function &F, DxilTypeSystem &typeSys) {
       continue;
     }
 
+    // RPS Change Starts
+
+    // TODO: Temporary workaround.
+    // Don't transform any RPS handle / compound types for now.
+    Type* AllocaType = AI->getAllocatedType();
+    if (AllocaType->isStructTy())
+    {
+      std::string TyName = AllocaType->getStructName();
+      if ((TyName == "struct.texture") ||
+          (TyName == "struct.buffer") ||
+          (TyName == "struct.ResourceDesc") ||
+          (TyName == "struct.TextureViewDesc") ||
+          (TyName == "struct.BufferViewDesc")) {
+          continue;
+      }
+    }
+
+    // RPS Chang Ends
+
     // If the alloca looks like a good candidate for scalar replacement, and
     // if
     // all its users can be transformed, then split up the aggregate into its
