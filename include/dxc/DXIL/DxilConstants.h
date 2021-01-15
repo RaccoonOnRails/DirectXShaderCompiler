@@ -1529,6 +1529,15 @@ namespace DXIL {
       RPS_RESOURCE_FLAG_CUBEMAP_COMPATIBLE   = 1 << 3,
     };
 
+    enum RPS_CLEAR_FLAGS {
+      RPS_CLEAR_COLOR        = 1 << 0,
+      RPS_CLEAR_DEPTH        = 1 << 1,
+      RPS_CLEAR_STENCIL      = 1 << 2,
+      RPS_CLEAR_DEPTHSTENCIL = RPS_CLEAR_DEPTH | RPS_CLEAR_STENCIL,    
+      RPS_CLEAR_UAV_FLOAT    = 1 << 3,
+      RPS_CLEAR_UAV_UINT     = 1 << 4,
+    };
+
     enum RpsCommandTypeFlagBits {
       RPS_COMMAND_TYPE_NO_FLAGS                   = 0,            ///< No flags.
       RPS_COMMAND_TYPE_GRAPHICS_BIT               = (1 << 1),     ///< The command is graphics only.

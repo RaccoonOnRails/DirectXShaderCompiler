@@ -497,6 +497,15 @@ void hlsl::AddRPSConstants(clang::ASTContext &context) {
     { "RPS_RESOURCE_FLAG_CUBEMAP_COMPATIBLE",   (unsigned)DXIL::RPS::RPS_RESOURCE_FLAG_CUBEMAP_COMPATIBLE   },
   });
 
+  AddTypedefPseudoEnum(context, "RPS_CLEAR_FLAGS", {
+    { "RPS_CLEAR_COLOR",        (unsigned)DXIL::RPS::RPS_CLEAR_COLOR        },
+    { "RPS_CLEAR_DEPTH",        (unsigned)DXIL::RPS::RPS_CLEAR_DEPTH        },
+    { "RPS_CLEAR_STENCIL",      (unsigned)DXIL::RPS::RPS_CLEAR_STENCIL      },
+    { "RPS_CLEAR_DEPTHSTENCIL", (unsigned)DXIL::RPS::RPS_CLEAR_DEPTHSTENCIL },
+    { "RPS_CLEAR_UAV_FLOAT",    (unsigned)DXIL::RPS::RPS_CLEAR_UAV_FLOAT    },
+    { "RPS_CLEAR_UAV_UINT",     (unsigned)DXIL::RPS::RPS_CLEAR_UAV_UINT     },
+  });
+
   AddTypedefPseudoEnum(context, "RPS_FORMAT", {
     { "RPS_FORMAT_UNKNOWN"                  , 0u  },
     { "RPS_FORMAT_R32G32B32A32_TYPELESS"    , 1u  },
