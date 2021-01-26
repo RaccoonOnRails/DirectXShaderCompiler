@@ -216,7 +216,7 @@ inline texture create_tex3d(
     return create_texture(desc);
 }
 
-inline texture create_buffer( uint64_t width, uint numTemporalLayers = 1, RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE )
+inline buffer create_buffer( uint64_t width, uint numTemporalLayers = 1, RPS_RESOURCE_FLAGS flags = RPS_RESOURCE_FLAG_NONE )
 {
     ResourceDesc desc;
     desc.Dimension = RPS_RESOURCE_BUFFER;
@@ -230,7 +230,7 @@ inline texture create_buffer( uint64_t width, uint numTemporalLayers = 1, RPS_RE
     desc.SampleQuality = 0;
     desc.TemporalLayers = numTemporalLayers;
 
-    return create_texture(desc);
+    return create_buffer(desc);
 }
 
 inline SubResourceRange make_texture_range( uint baseMip, uint mipLevels = 1, uint baseArraySlice = 0, uint numArraySlices = 1, uint planeMask = 1, uint temporalLayer = 0 )
