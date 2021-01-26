@@ -5094,8 +5094,13 @@ public:
               DIdentName.data() + DIdentName.size());
           m_sema->Context.RPSResourceNames.push_back('\0');
 
+          QualType uint32Type = GetBasicKindType(AR_BASIC_UINT32);
+
           Expr *SetResNameArgExprs[3];
-          SetResNameArgExprs[0] = Initializer;
+          SetResNameArgExprs[0] = CStyleCastExpr::Create(
+              *m_context, uint32Type, VK_RValue, CK_FlatConversion, Initializer,
+              nullptr, m_context->getTrivialTypeSourceInfo(uint32Type, NoLoc),
+              Initializer->getExprLoc(), Initializer->getExprLoc());
           Expr *StrOffsetLiteral = IntegerLiteral::Create(
               *m_context, llvm::APInt(32, nameBegin),
               m_context->getIntTypeForBitwidth(32, 0), SourceLocation());
@@ -5115,6 +5120,17 @@ public:
           Result = m_sema->ActOnCallExpr(
               m_sema->getCurScope(), SetResNameFnExpr.get(), SourceLocation(),
               ArgExprs, SourceLocation());
+
+          if (!Result.isInvalid()) {
+            Result = CStyleCastExpr::Create(
+                *m_context, Initializer->getType(), VK_RValue,
+                CK_FlatConversion, Result.get(), nullptr,
+                m_context->getTrivialTypeSourceInfo(Initializer->getType(),
+                                                    NoLoc),
+                Initializer->getExprLoc(), Initializer->getExprLoc());
+          } else {
+            m_sema->Diag(Initializer->getExprLoc(), diag::err_rps_general);
+          }
         }
       }
     }

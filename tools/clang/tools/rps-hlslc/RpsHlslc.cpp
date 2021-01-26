@@ -125,8 +125,7 @@ uint __rps_asyncmarker();
 #define __RPS_ENUM_VALUE(N, V) N = (V),
 #define __RPS_END_DECL_ENUM() }; }
 
-texture __rps_set_resource_name(texture r, uint nameOffset, uint nameLength);
-buffer __rps_set_resource_name(buffer r, uint nameOffset, uint nameLength);
+uint __rps_set_resource_name(uint h, uint nameOffset, uint nameLength);
 
 ResourceDesc     describe_resource      ( texture t ) { return t.desc(); }
 ResourceDesc     describe_resource      ( buffer b  ) { return b.desc(); }
